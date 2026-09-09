@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/winrarr/infisical-entity-operator
+  tag: dev
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+leaderElection: true
+metrics:
+  enabled: false
+  bindAddress: ":8443"
+  secure: true
+healthProbeBindAddress: ":8081"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

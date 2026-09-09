@@ -1,0 +1,31 @@
+infisical:
+  enabled: true
+  replicaCount: 1
+  autoBootstrap:
+    enabled: true
+    image:
+      tag: "0.41.86"
+    organization: "operator-dev"
+    secretTemplate: '{"data":{"token":"{{.Identity.Credentials.Token}}"}}'
+    secretDestination:
+      name: infisical-bootstrap-token
+      namespace: infisical
+    credentialSecret:
+      name: infisical-bootstrap-credentials
+  service:
+    type: ClusterIP
+
+ingress:
+  enabled: false
+  nginx:
+    enabled: false
+
+postgresql:
+  primary:
+    persistence:
+      enabled: false
+
+redis:
+  master:
+    persistence:
+      enabled: false

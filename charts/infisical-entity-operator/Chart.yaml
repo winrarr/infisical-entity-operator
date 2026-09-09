@@ -1,0 +1,7 @@
+apiVersion: v2
+name: infisical-entity-operator
+description: Kubernetes controllers for declaratively managing Infisical projects and machine identities
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+kubeVersion: ">=1.29.0-0"

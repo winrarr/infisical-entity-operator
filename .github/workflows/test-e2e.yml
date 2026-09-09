@@ -1,0 +1,27 @@
+name: E2E Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-e2e:
+    name: Kind, Cilium, and Infisical
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run live test
+        run: make kind-e2e
+
+      - name: Delete the Kind cluster
+        if: always()
+        run: make kind-down || true

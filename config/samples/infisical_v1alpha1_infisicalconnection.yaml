@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infisical-token
+type: Opaque
+stringData:
+  token: replace-me
+---
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalConnection
+metadata:
+  name: infisical
+spec:
+  hostAPI: https://app.infisical.com/api
+  authSecretRef:
+    name: infisical-token
+    key: token

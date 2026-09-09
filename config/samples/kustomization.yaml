@@ -1,0 +1,4 @@
+resources:
+  - infisical_v1alpha1_infisicalconnection.yaml
+  - infisical_v1alpha1_infisicalproject.yaml
+  - infisical_v1alpha1_infisicalidentity.yaml

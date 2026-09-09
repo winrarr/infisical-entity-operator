@@ -1,0 +1,33 @@
+# Local binaries and generated build output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/*
+Dockerfile.cross
+dist/
+site/
+tmp/
+cover.out
+
+# Local credentials and kubeconfig files
+.env
+*.local.yaml
+*.kubeconfig
+
+# Test binary, built with `go test -c`
+*.test
+
+# Go workspace file
+go.work
+
+# Kubernetes Generated files - skip generated files, except for vendored files
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+.vscode
+*.swp
+*.swo
+*~

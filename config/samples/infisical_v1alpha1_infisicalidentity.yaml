@@ -1,0 +1,15 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalIdentity
+metadata:
+  name: payments-workload
+spec:
+  connectionRef:
+    name: infisical
+  projectRef:
+    name: payments
+  identityName: payments-workload
+  metadata:
+    - key: owner
+      value: platform
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan

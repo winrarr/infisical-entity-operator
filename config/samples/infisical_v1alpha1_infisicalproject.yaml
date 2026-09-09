@@ -1,0 +1,12 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalProject
+metadata:
+  name: payments
+spec:
+  connectionRef:
+    name: infisical
+  projectName: payments
+  slug: payments-platform
+  description: Managed by Kubernetes
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan
