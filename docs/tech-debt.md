@@ -22,7 +22,7 @@ The most important end-to-end acceptance paths for two CRDs depend on an Infisic
 
 ### Exit criteria
 
-Add a separately provisioned live test target or CI environment that can create a project role and complete allowed/disallowed Kubernetes Auth login checks, then document its credentials and network boundary without storing secrets in the repository. Related planned work: [BL-003](backlog.md#bl-003-add-infisicalkubernetesauth) and [BL-004](backlog.md#bl-004-add-infisicalprojectrole).
+Add a separately provisioned live test target or CI environment that can create an `InfisicalProjectRole` and complete allowed/disallowed `InfisicalKubernetesAuth` login checks, then document its credentials and network boundary without storing secrets in the repository.
 
 ## TD-002: Establish an Infisical API compatibility and drift policy
 
