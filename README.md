@@ -87,7 +87,7 @@ This creates an isolated Kind cluster with Cilium, installs the official Infisic
 - Connection and ownership references are immutable after creation so an external object cannot silently move between endpoints or projects.
 - The operator stores external identifiers and observed state in Kubernetes status, never external bearer tokens.
 
-See [product scope](docs/product.md), [architecture](docs/architecture.md), [backlog](docs/backlog.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
+See the [documentation map](docs/index.md), [product scope](docs/product.md), [architecture](docs/architecture.md), [verification guide](docs/verification.md), [backlog](docs/backlog.md), [tech-debt register](docs/tech-debt.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
 
 ## Contributing
 

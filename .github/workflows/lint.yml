@@ -20,4 +20,4 @@ jobs:
           go-version-file: go.mod
 
       - name: Run linter
-        run: make lint-config lint
+        run: make lint-config lint helm-lint

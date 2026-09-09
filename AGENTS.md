@@ -24,6 +24,7 @@ Reconciliation lives in `internal/controller/infisical`; the intentionally small
 
 ```sh
 make check             # format, generate, manifests, tests, vet, lint, Helm lint
+make verify-generated  # regenerate and fail if committed derived artifacts drift
 make build             # build bin/manager
 make manifests generate
 make build-installer   # write dist/install.yaml
@@ -38,3 +39,17 @@ The default local environment is the isolated cluster named `infisical-entity-op
 Keep reconciliation idempotent and status-driven. Use finalizers only for resources with `deletionPolicy: Delete`; the default is safe orphaning. Treat connection, project, and Secret references as same-namespace dependencies. Preserve external API error details in conditions without logging bearer tokens. Add focused unit tests for client contracts and reconciliation transitions, then run `make check`.
 
 Read `docs/architecture.md`, `docs/operations/local-kind.md`, and the relevant decision records before changing external API behavior or local cluster networking.
+
+## Durable project knowledge
+
+- `docs/index.md` is the documentation map.
+- `docs/product.md` defines the supported outcome and non-goals.
+- `docs/architecture.md` describes component boundaries and reconciliation flow.
+- `docs/research/` contains dated, source-backed Infisical API and dependency research.
+- `docs/decisions/` contains accepted design decisions and their rationale.
+- `docs/backlog.md` contains intended future outcomes that are not implemented.
+- `docs/tech-debt.md` contains material known shortcomings intentionally left unresolved.
+- `docs/verification.md` explains what each check proves and the limits of local evidence.
+- `docs/operations/` contains safety-sensitive local deployment and troubleshooting procedures.
+
+Keep these categories separate: update a decision for consequential rationale, research for external evidence, the backlog for planned work, the tech-debt register for unresolved current shortcomings, and the verification guide for test interpretation or evidence policy. Remove stale guidance instead of appending exceptions.

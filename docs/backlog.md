@@ -32,6 +32,8 @@ Projects currently expose environments only as observed status. A first-class re
 
 ## BL-002: Make project roles declarative for `InfisicalIdentity`
 
+Status: planned.
+
 ### Goal
 
 Allow a project-scoped machine identity to declare the permanent Infisical project roles it should have.
@@ -112,6 +114,8 @@ Identity role assignments are only reproducible when the referenced custom roles
 
 ## BL-005: Publish GitHub Pages documentation
 
+Status: planned.
+
 ### Goal
 
 Publish the project documentation on GitHub Pages as one documentation deliverable, with the repository Markdown remaining the source of truth.
@@ -136,6 +140,8 @@ The project now has product, architecture, operations, research, and decision do
 - The site contains no credentials or environment-specific local-cluster state.
 
 ## BL-006: Evaluate and harden multi-tenancy
+
+Status: evaluation pending.
 
 ### Goal
 
