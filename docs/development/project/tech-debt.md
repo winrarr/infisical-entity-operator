@@ -44,7 +44,7 @@ Infisical API response envelopes, permission shapes, or endpoint behavior can ch
 
 ### Exit criteria
 
-Define the supported Infisical server/API versions, record the authoritative schema source for each supported endpoint, and add contract or compatibility checks that fail or clearly report incompatible changes. Revisit [0003: Use a narrow typed Infisical client](decisions/0003-small-typed-client.md) if a mature client becomes a better fit.
+Define the supported Infisical server/API versions, record the authoritative schema source for each supported endpoint, and add contract or compatibility checks that fail or clearly report incompatible changes. Revisit [0003: Use a narrow typed Infisical client](../decisions/0003-small-typed-client.md) if a mature client becomes a better fit.
 
 ## TD-003: Tighten project-role permission validation
 

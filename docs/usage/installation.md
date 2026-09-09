@@ -36,7 +36,7 @@ helm upgrade infisical-entity-operator \
   --wait
 ```
 
-Uninstalling the chart removes the operator and leaves custom resources and CRDs for an explicit cleanup decision. Resources default to `deletionPolicy: Orphan`; use `Delete` only when remote deletion is intentional. See [lifecycle and ownership](../reference/deletion-and-ownership.md).
+Uninstalling the chart removes the operator and leaves custom resources and CRDs for an explicit cleanup decision. Resources default to `deletionPolicy: Orphan`; use `Delete` only when remote deletion is intentional. See [lifecycle and ownership](reference/deletion-and-ownership.md).
 
 ## Kustomize bundle
 

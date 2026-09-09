@@ -20,4 +20,4 @@ Permission rules are part of the operator’s desired state and should be review
 
 ## Consequences
 
-The CRD is easier to review and can evolve with explicit fields, but the current free-form strings leave a known validation gap recorded in [TD-003](../tech-debt.md#td-003-tighten-project-role-permission-validation). The client’s response normalization is intentionally part of the compatibility boundary rather than a second user-facing schema.
+The CRD is easier to review and can evolve with explicit fields, but the current free-form strings leave a known validation gap recorded in [TD-003](../project/tech-debt.md#td-003-tighten-project-role-permission-validation). The client’s response normalization is intentionally part of the compatibility boundary rather than a second user-facing schema.

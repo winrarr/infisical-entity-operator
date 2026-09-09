@@ -76,7 +76,7 @@ sync-chart-generated: ## Copy generated CRDs and RBAC into the Helm chart.
 
 .PHONY: verify-generated
 verify-generated: manifests generate ## Verify committed generated artifacts are current.
-	@git diff --exit-code -- api/infisical/v1alpha1/zz_generated.deepcopy.go config/crd/bases config/rbac/role.yaml charts/infisical-entity-operator/crds charts/infisical-entity-operator/templates/clusterrole.yaml docs/reference/api.md
+	@git diff --exit-code -- api/infisical/v1alpha1/zz_generated.deepcopy.go config/crd/bases config/rbac/role.yaml charts/infisical-entity-operator/crds charts/infisical-entity-operator/templates/clusterrole.yaml docs/usage/reference/api.md
 
 .PHONY: vet
 vet: ## Run go vet.
@@ -104,14 +104,14 @@ helm-lint: ## Lint the operator Helm chart.
 
 .PHONY: generate-api-reference
 generate-api-reference: crd-ref-docs ## Generate the CRD API reference.
-	@mkdir -p docs/reference
+	@mkdir -p docs/usage/reference
 	"$(CRD_REF_DOCS)" \
 		--config hack/crd-ref-docs.yaml \
 		--renderer markdown \
 		--source-path ./api \
-		--output-path docs/reference/api.md
-	@awk '{ lines[NR] = $$0 } END { last = NR; while (last > 0 && lines[last] == "") last--; for (i = 1; i <= last; i++) print lines[i] }' docs/reference/api.md > docs/reference/api.md.tmp
-	@mv docs/reference/api.md.tmp docs/reference/api.md
+		--output-path docs/usage/reference/api.md
+	@awk '{ lines[NR] = $$0 } END { last = NR; while (last > 0 && lines[last] == "") last--; for (i = 1; i <= last; i++) print lines[i] }' docs/usage/reference/api.md > docs/usage/reference/api.md.tmp
+	@mv docs/usage/reference/api.md.tmp docs/usage/reference/api.md
 
 .PHONY: build-docs-site
 build-docs-site: generate-api-reference ## Build the documentation site with strict link validation.

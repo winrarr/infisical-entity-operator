@@ -53,4 +53,4 @@ kubectl -n infisical-demo get infisicalconnection,infisicalproject
 kubectl -n infisical-demo describe infisicalproject payments
 ```
 
-Then add environments, roles, identities, and Kubernetes Auth from the [examples](examples/index.md) or the [CRD guides](crds/index.md). Read [installation](introduction/installation.md) for release and upgrade details and [troubleshooting](reference/troubleshooting.md) if a resource is not ready.
+Then add environments, roles, identities, and Kubernetes Auth from the [examples](examples/index.md) or the [CRD guides](crds/index.md). Read [installation](installation.md) for release and upgrade details and [troubleshooting](reference/troubleshooting.md) if a resource is not ready.

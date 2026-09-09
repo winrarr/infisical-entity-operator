@@ -20,4 +20,4 @@ Deletion is dependency-aware. Keep parent resources until child resources have b
 
 Delete protection is an Infisical-side setting for projects and identities. It can intentionally prevent remote deletion; inspect the `Ready` condition and controller events when a `Delete` policy cannot complete.
 
-See [safe external deletion](../decisions/0002-safe-external-deletion.md) for the design rationale.
+See [safe external deletion](../../development/decisions/0002-safe-external-deletion.md) for the design rationale.

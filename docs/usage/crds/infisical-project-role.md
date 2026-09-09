@@ -25,6 +25,6 @@ spec:
   deletionPolicy: Orphan
 ```
 
-The connection, project, and slug are immutable. Infisical plan capability still governs whether custom roles can be created or updated at a given endpoint. The [local verification guide](../verification.md) records the known standalone-chart limitation.
+The connection, project, and slug are immutable. Infisical plan capability still governs whether custom roles can be created or updated at a given endpoint. The [local verification guide](../../development/project/verification.md) records the known standalone-chart limitation.
 
 See the [generated schema](../reference/api.md#infisicalprojectrole) for condition operators and complete status fields.

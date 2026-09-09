@@ -36,6 +36,6 @@ Kubernetes Auth allow/deny login checks run only when the live API accepts the c
 
 ## Generated output and repository hygiene
 
-API types and controller markers are source files. `api/infisical/v1alpha1/zz_generated.deepcopy.go`, `config/crd/bases/`, `config/rbac/role.yaml`, `charts/infisical-entity-operator/crds/`, the chart ClusterRole copy, and `docs/reference/api.md` are derived. Run `make manifests generate` after marker or API changes, then use `make verify-generated` to detect drift.
+API types and controller markers are source files. `api/infisical/v1alpha1/zz_generated.deepcopy.go`, `config/crd/bases/`, `config/rbac/role.yaml`, `charts/infisical-entity-operator/crds/`, the chart ClusterRole copy, and `docs/usage/reference/api.md` are derived. Run `make manifests generate` after marker or API changes, then use `make verify-generated` to detect drift.
 
 Do not commit `bin/`, `dist/`, `tmp/`, coverage profiles, kubeconfig files, local cluster state, bootstrap credentials, or any Infisical token. A test that passes after leaking one of these is not acceptable evidence.
