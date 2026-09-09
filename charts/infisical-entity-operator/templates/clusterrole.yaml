@@ -16,7 +16,10 @@ rules:
   - infisical.infisical-operator.io
   resources:
   - infisicalconnections
+  - infisicalenvironments
   - infisicalidentities
+  - infisicalkubernetesauths
+  - infisicalprojectroles
   - infisicalprojects
   verbs:
   - create
@@ -30,7 +33,10 @@ rules:
   - infisical.infisical-operator.io
   resources:
   - infisicalconnections/status
+  - infisicalenvironments/status
   - infisicalidentities/status
+  - infisicalkubernetesauths/status
+  - infisicalprojectroles/status
   - infisicalprojects/status
   verbs:
   - get
@@ -39,7 +45,10 @@ rules:
 - apiGroups:
   - infisical.infisical-operator.io
   resources:
+  - infisicalenvironments/finalizers
   - infisicalidentities/finalizers
+  - infisicalkubernetesauths/finalizers
+  - infisicalprojectroles/finalizers
   - infisicalprojects/finalizers
   verbs:
   - update

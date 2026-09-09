@@ -1,6 +1,6 @@
 apiVersion: v2
 name: infisical-entity-operator
-description: Kubernetes controllers for declaratively managing Infisical projects and machine identities
+description: Kubernetes controllers for declaratively managing Infisical projects, environments, roles, machine identities, and Kubernetes Auth
 type: application
 version: 0.1.0
 appVersion: 0.1.0

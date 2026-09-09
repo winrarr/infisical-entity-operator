@@ -18,7 +18,9 @@ The command:
 - builds and loads the operator image;
 - installs the CRDs and operator chart;
 - applies `config/network-policy/allow-infisical-egress.yaml`;
-- creates connection, project, and identity resources and waits for all three `Ready=True`.
+- creates connection, project, identity, and environment resources and waits for them to become `Ready=True`;
+- creates project-role and Kubernetes Auth resources and verifies their external error handling when the local Infisical plan rejects custom roles or cluster-local Kubernetes review URLs;
+- runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
 
 The generated instance-admin token is a cluster Secret named `infisical-bootstrap-token` in namespace `infisical`. It is intentionally not written to the checkout or printed by the test.
 
@@ -28,6 +30,8 @@ The generated instance-admin token is a cluster Secret named `infisical-bootstra
 kubectl get pods -A
 kubectl get ciliumnetworkpolicy -n infisical-entity-operator-system
 kubectl describe infisicalproject e2e-project -n infisical-entity-operator-e2e
+kubectl describe infisicalprojectrole e2e-project-role -n infisical-entity-operator-e2e
+kubectl describe infisicalkubernetesauth e2e-kubernetes-auth -n infisical-entity-operator-e2e
 kubectl logs deployment/infisical-entity-operator-infisical-entity-operator -n infisical-entity-operator-system
 kubectl logs job/infisical-bootstrap-1 -n infisical
 ```

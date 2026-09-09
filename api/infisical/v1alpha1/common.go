@@ -54,8 +54,7 @@ type SecretKeyReference struct {
 	// Name is the Secret name.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
-	// Key is the Secret data key containing the bearer token.
-	// +kubebuilder:default=token
+	// Key is the Secret data key.
 	// +kubebuilder:validation:MinLength=1
 	Key string `json:"key,omitempty"`
 }

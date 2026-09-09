@@ -1,0 +1,20 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalProjectRole
+metadata:
+  name: payments-secret-reader
+spec:
+  connectionRef:
+    name: infisical
+  projectRef:
+    name: payments
+  roleName: Payments Secret Reader
+  slug: payments-secret-reader
+  permissions:
+    - subject: secrets
+      action:
+        - readValue
+      conditions:
+        environment:
+          $eq: production
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan

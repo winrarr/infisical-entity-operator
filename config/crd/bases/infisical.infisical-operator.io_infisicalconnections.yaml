@@ -46,9 +46,7 @@ spec:
                   The Secret must be in the same namespace as this connection.
                 properties:
                   key:
-                    default: token
-                    description: Key is the Secret data key containing the bearer
-                      token.
+                    description: Key is the Secret data key.
                     minLength: 1
                     type: string
                   name:

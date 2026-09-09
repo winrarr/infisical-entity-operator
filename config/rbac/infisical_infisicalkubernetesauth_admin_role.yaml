@@ -1,0 +1,25 @@
+# This rule is not used by the project infisical-entity-operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants full permissions ('*') over infisical.infisical-operator.io.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: infisical-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: infisical-infisicalkubernetesauth-admin-role
+rules:
+- apiGroups:
+  - infisical.infisical-operator.io
+  resources:
+  - infisicalkubernetesauths
+  verbs:
+  - '*'
+- apiGroups:
+  - infisical.infisical-operator.io
+  resources:
+  - infisicalkubernetesauths/status
+  verbs:
+  - get

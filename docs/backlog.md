@@ -4,6 +4,8 @@ Items are ordered by current priority. Each item should be refined against the c
 
 ## BL-001: Add `InfisicalEnvironment`
 
+Status: implemented.
+
 ### Goal
 
 Provide a namespaced Kubernetes resource for declaring the lifecycle of an Infisical environment owned by an `InfisicalProject`.
@@ -55,6 +57,8 @@ Infisical accepts roles during identity creation, but role membership has its ow
 
 ## BL-003: Add `InfisicalKubernetesAuth`
 
+Status: implemented. The local e2e test exercises the controller’s external error handling when the self-hosted chart rejects cluster-local review URLs; the successful attach and login path is covered by HTTP contract tests and runs when a suitable Infisical endpoint is available.
+
 ### Goal
 
 Configure and reconcile Infisical Kubernetes Auth for a managed machine identity so Kubernetes workloads can authenticate without a long-lived client secret.
@@ -80,6 +84,8 @@ Kubernetes Auth is the most Kubernetes-native authentication method in Infisical
 - Network-policy coverage verifies only the required Kubernetes and Infisical paths are available.
 
 ## BL-004: Add `InfisicalProjectRole`
+
+Status: implemented. The local standalone chart currently rejects custom roles on its plan, so the live test records that expected limitation while the controller path is covered by HTTP contract tests.
 
 ### Goal
 

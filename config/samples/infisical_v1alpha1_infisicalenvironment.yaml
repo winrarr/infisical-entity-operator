@@ -1,0 +1,14 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalEnvironment
+metadata:
+  name: payments-qa
+spec:
+  connectionRef:
+    name: infisical
+  projectRef:
+    name: payments
+  environmentName: QA
+  slug: qa
+  position: 4
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan

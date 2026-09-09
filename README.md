@@ -1,10 +1,14 @@
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical projects and project-scoped machine identities.
+Kubernetes-native lifecycle management for Infisical projects, environments, project roles, machine identities, and Kubernetes Auth.
 
 The operator gives platform teams a declarative boundary around the Infisical control plane:
 
-`InfisicalConnection` → `InfisicalProject` → `InfisicalIdentity`
+```text
+InfisicalConnection → InfisicalProject → InfisicalEnvironment
+                                      ├→ InfisicalProjectRole
+                                      └→ InfisicalIdentity → InfisicalKubernetesAuth
+```
 
 It handles create-or-adopt workflows, drift correction, dependency-aware status conditions, finalizers, and explicit deletion policy. Secret synchronization remains outside this project; use Infisical’s official Kubernetes operator for `InfisicalSecret`-style workloads.
 
@@ -54,6 +58,8 @@ spec:
   identityName: payments-workload
 ```
 
+An environment, project role, or Kubernetes Auth resource can reference the project or identity in the same namespace and will wait for that dependency to become ready.
+
 Install the chart and CRDs from a repository checkout:
 
 ```sh
@@ -72,7 +78,7 @@ The complete local path is intentionally reproducible:
 make kind-e2e
 ```
 
-This creates an isolated Kind cluster with Cilium, installs the official Infisical standalone Helm chart, bootstraps a short-lived local instance-admin token, deploys the operator, applies a Cilium-aware egress policy, and verifies connection, project, and identity reconciliation. See [local Kind operations](docs/operations/local-kind.md) for cleanup and troubleshooting.
+This creates an isolated Kind cluster with Cilium, installs the official Infisical standalone Helm chart, bootstraps a short-lived local instance-admin token, deploys the operator, applies a Cilium-aware egress policy, and verifies connection, project, identity, and environment reconciliation. It also exercises project-role and Kubernetes Auth reconciliation; the local Infisical chart may report those features as unavailable when its plan rejects custom roles or cluster-local review URLs. See [local Kind operations](docs/operations/local-kind.md) for cleanup and troubleshooting.
 
 ## API and safety notes
 

@@ -25,6 +25,33 @@ resources:
   controller: true
   domain: infisical-operator.io
   group: infisical
+  kind: InfisicalEnvironment
+  path: github.com/winrarr/infisical-entity-operator/api/infisical/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: infisical-operator.io
+  group: infisical
+  kind: InfisicalKubernetesAuth
+  path: github.com/winrarr/infisical-entity-operator/api/infisical/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: infisical-operator.io
+  group: infisical
+  kind: InfisicalProjectRole
+  path: github.com/winrarr/infisical-entity-operator/api/infisical/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: infisical-operator.io
+  group: infisical
   kind: InfisicalProject
   path: github.com/winrarr/infisical-entity-operator/api/infisical/v1alpha1
   version: v1alpha1

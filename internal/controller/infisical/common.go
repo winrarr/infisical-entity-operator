@@ -71,20 +71,9 @@ func infisicalClientForConnection(ctx context.Context, kubeClient client.Client,
 		return nil, fmt.Errorf("get InfisicalConnection %s/%s: %w", namespace, ref.Name, err)
 	}
 
-	key := connection.Spec.AuthSecretRef.Key
-	if key == "" {
-		key = "token"
-	}
-	var secret corev1.Secret
-	if err := kubeClient.Get(ctx, types.NamespacedName{Name: connection.Spec.AuthSecretRef.Name, Namespace: namespace}, &secret); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, newDependencyError("authentication Secret %s/%s was not found", namespace, connection.Spec.AuthSecretRef.Name)
-		}
-		return nil, fmt.Errorf("get authentication Secret %s/%s: %w", namespace, connection.Spec.AuthSecretRef.Name, err)
-	}
-	token, ok := secret.Data[key]
-	if !ok || strings.TrimSpace(string(token)) == "" {
-		return nil, newDependencyError("authentication Secret %s/%s does not contain a non-empty %q key", namespace, connection.Spec.AuthSecretRef.Name, key)
+	token, err := secretValueFromReference(ctx, kubeClient, namespace, connection.Spec.AuthSecretRef, "token", "authentication")
+	if err != nil {
+		return nil, err
 	}
 
 	hostAPI := connection.Spec.HostAPI
@@ -95,7 +84,33 @@ func infisicalClientForConnection(ctx context.Context, kubeClient client.Client,
 	if connection.Spec.RequestTimeout != nil && connection.Spec.RequestTimeout.Duration > 0 {
 		timeout = connection.Spec.RequestTimeout.Duration
 	}
-	return infisicalclient.New(hostAPI, string(token), timeout)
+	return infisicalclient.New(hostAPI, token, timeout)
+}
+
+func secretValueFromReference(ctx context.Context, kubeClient client.Client, namespace string, ref infisicalv1alpha1.SecretKeyReference, defaultKey, purpose string) (string, error) {
+	key := ref.Key
+	if key == "" {
+		key = defaultKey
+	}
+	var secret corev1.Secret
+	if err := kubeClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", newDependencyError("%s Secret %s/%s was not found", purpose, namespace, ref.Name)
+		}
+		return "", fmt.Errorf("get %s Secret %s/%s: %w", purpose, namespace, ref.Name, err)
+	}
+	value, ok := secret.Data[key]
+	if !ok || strings.TrimSpace(string(value)) == "" {
+		return "", newDependencyError("%s Secret %s/%s does not contain a non-empty %q key", purpose, namespace, ref.Name, key)
+	}
+	return string(value), nil
+}
+
+func optionalSecretValueFromReference(ctx context.Context, kubeClient client.Client, namespace string, ref *infisicalv1alpha1.SecretKeyReference, defaultKey, purpose string) (string, error) {
+	if ref == nil {
+		return "", nil
+	}
+	return secretValueFromReference(ctx, kubeClient, namespace, *ref, defaultKey, purpose)
 }
 
 func ensureFinalizer(ctx context.Context, kubeClient client.Client, object client.Object) (bool, error) {
@@ -175,7 +190,15 @@ func persistStatus(ctx context.Context, kubeClient client.Client, object client.
 	if reflect.DeepEqual(before, after) {
 		return nil
 	}
-	return kubeClient.Status().Update(ctx, object)
+	if err := kubeClient.Status().Update(ctx, object); err != nil {
+		// A dependency update can race with this status write. The reconcile result
+		// already requests another read, so let the next attempt use the latest object.
+		if apierrors.IsConflict(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func statusErrorMessage(err error) string {
@@ -197,6 +220,115 @@ func identityName(identity *infisicalv1alpha1.InfisicalIdentity) string {
 		return identity.Spec.IdentityName
 	}
 	return identity.Name
+}
+
+func environmentName(environment *infisicalv1alpha1.InfisicalEnvironment) string {
+	if environment.Spec.EnvironmentName != "" {
+		return environment.Spec.EnvironmentName
+	}
+	return environment.Name
+}
+
+func environmentSlug(environment *infisicalv1alpha1.InfisicalEnvironment) string {
+	if environment.Spec.Slug != "" {
+		return environment.Spec.Slug
+	}
+	return environment.Name
+}
+
+func projectRoleName(role *infisicalv1alpha1.InfisicalProjectRole) string {
+	if role.Spec.RoleName != "" {
+		return role.Spec.RoleName
+	}
+	return role.Name
+}
+
+func projectRoleSlug(role *infisicalv1alpha1.InfisicalProjectRole) string {
+	if role.Spec.Slug != "" {
+		return role.Spec.Slug
+	}
+	return role.Name
+}
+
+func projectRolePermissionsFrom(spec []infisicalv1alpha1.ProjectRolePermission) []infisicalclient.ProjectRolePermission {
+	permissions := make([]infisicalclient.ProjectRolePermission, 0, len(spec))
+	for _, permission := range spec {
+		permissions = append(permissions, infisicalclient.ProjectRolePermission{
+			Subject:    permission.Subject,
+			Action:     infisicalclient.ProjectRoleActions(permission.Action),
+			Inverted:   boolValue(permission.Inverted, false),
+			Conditions: projectRoleConditionsFrom(permission.Conditions),
+		})
+	}
+	return permissions
+}
+
+func projectRoleConditionsFrom(conditions *infisicalv1alpha1.ProjectRoleConditions) *infisicalclient.ProjectRoleConditions {
+	if conditions == nil {
+		return nil
+	}
+	return &infisicalclient.ProjectRoleConditions{
+		Environment: projectRoleStringConditionFrom(conditions.Environment),
+		SecretPath:  projectRoleStringConditionFrom(conditions.SecretPath),
+		SecretName:  projectRoleStringConditionFrom(conditions.SecretName),
+		SecretTags:  projectRoleSecretTagsConditionFrom(conditions.SecretTags),
+		EventType:   projectRoleStringConditionFrom(conditions.EventType),
+	}
+}
+
+func projectRoleStringConditionFrom(condition *infisicalv1alpha1.ProjectRoleStringCondition) *infisicalclient.ProjectRoleStringCondition {
+	if condition == nil {
+		return nil
+	}
+	return &infisicalclient.ProjectRoleStringCondition{Eq: condition.Eq, Ne: condition.Ne, In: condition.In, Glob: condition.Glob}
+}
+
+func projectRoleSecretTagsConditionFrom(condition *infisicalv1alpha1.ProjectRoleSecretTagsCondition) *infisicalclient.ProjectRoleSecretTagsCondition {
+	if condition == nil {
+		return nil
+	}
+	return &infisicalclient.ProjectRoleSecretTagsCondition{In: condition.In, All: condition.All}
+}
+
+func projectRolePermissionsTo(permissions []infisicalclient.ProjectRolePermission) []infisicalv1alpha1.ProjectRolePermission {
+	result := make([]infisicalv1alpha1.ProjectRolePermission, 0, len(permissions))
+	for _, permission := range permissions {
+		inverted := permission.Inverted
+		result = append(result, infisicalv1alpha1.ProjectRolePermission{
+			Subject:    permission.Subject,
+			Action:     append([]string(nil), permission.Action...),
+			Inverted:   &inverted,
+			Conditions: projectRoleConditionsTo(permission.Conditions),
+		})
+	}
+	return result
+}
+
+func projectRoleConditionsTo(conditions *infisicalclient.ProjectRoleConditions) *infisicalv1alpha1.ProjectRoleConditions {
+	if conditions == nil {
+		return nil
+	}
+	return &infisicalv1alpha1.ProjectRoleConditions{
+		Environment: projectRoleStringConditionTo(conditions.Environment),
+		SecretPath:  projectRoleStringConditionTo(conditions.SecretPath),
+		SecretName:  projectRoleStringConditionTo(conditions.SecretName),
+		SecretTags:  projectRoleSecretTagsConditionTo(conditions.SecretTags),
+		EventType:   projectRoleStringConditionTo(conditions.EventType),
+	}
+}
+
+func projectRoleStringConditionTo(condition *infisicalclient.ProjectRoleStringCondition) *infisicalv1alpha1.ProjectRoleStringCondition {
+	if condition == nil {
+		return nil
+	}
+	return &infisicalv1alpha1.ProjectRoleStringCondition{Eq: condition.Eq, Ne: condition.Ne, In: condition.In, Glob: condition.Glob}
+}
+
+func projectRoleSecretTagsConditionTo(condition *infisicalclient.ProjectRoleSecretTagsCondition) *infisicalv1alpha1.ProjectRoleSecretTagsCondition {
+	if condition == nil {
+		return nil
+	}
+	return &infisicalv1alpha1.ProjectRoleSecretTagsCondition{In: condition.In, All: condition.All}
 }
 
 func boolValue(value *bool, defaultValue bool) bool {

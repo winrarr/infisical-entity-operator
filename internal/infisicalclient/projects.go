@@ -21,13 +21,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 // Environment is an Infisical project environment.
 type Environment struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Slug          string     `json:"slug"`
+	Position      int32      `json:"position"`
+	ProjectID     string     `json:"projectId"`
+	DeleteAfter   *time.Time `json:"deleteAfter"`
+	SoftDeletedAt *time.Time `json:"softDeletedAt"`
 }
 
 // Project is the Infisical project representation used by the operator.

@@ -2,11 +2,14 @@
 
 ## Orientation
 
-This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1alpha1` are the source of truth for the three namespaced CRDs:
+This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1alpha1` are the source of truth for the six namespaced CRDs:
 
 - `InfisicalConnection` validates an Infisical API endpoint and reads a same-namespace bearer-token Secret.
 - `InfisicalProject` creates, adopts, updates, observes, and optionally deletes an Infisical project.
+- `InfisicalEnvironment` creates, adopts, updates, observes, and optionally deletes a project environment.
+- `InfisicalProjectRole` creates, adopts, updates, observes, and optionally deletes a project permission role.
 - `InfisicalIdentity` creates, adopts, updates, observes, and optionally deletes a project-scoped machine identity.
+- `InfisicalKubernetesAuth` attaches, adopts, updates, observes, and optionally removes Kubernetes Auth from a machine identity.
 
 Reconciliation lives in `internal/controller/infisical`; the intentionally small HTTP client lives in `internal/infisicalclient`. The Helm chart under `charts/infisical-entity-operator` is the primary installation path. Kustomize manifests under `config/` remain useful for CRD installation and bundle generation.
 

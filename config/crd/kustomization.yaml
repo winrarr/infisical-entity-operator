@@ -5,6 +5,9 @@ resources:
 - bases/infisical.infisical-operator.io_infisicalconnections.yaml
 - bases/infisical.infisical-operator.io_infisicalprojects.yaml
 - bases/infisical.infisical-operator.io_infisicalidentities.yaml
+- bases/infisical.infisical-operator.io_infisicalenvironments.yaml
+- bases/infisical.infisical-operator.io_infisicalkubernetesauths.yaml
+- bases/infisical.infisical-operator.io_infisicalprojectroles.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

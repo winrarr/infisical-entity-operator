@@ -1,0 +1,23 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalKubernetesAuth
+metadata:
+  name: payments-workload-kubernetes
+spec:
+  connectionRef:
+    name: infisical
+  identityRef:
+    name: payments-workload
+  kubernetesHost: https://kubernetes.default.svc
+  allowedNamespaces:
+    - payments
+  allowedNames:
+    - payments-workload
+  tokenReviewMode: api
+  caCertSecretRef:
+    name: kubernetes-api-ca
+    key: ca.crt
+  tokenReviewerJWTSecretRef:
+    name: kubernetes-token-reviewer
+    key: token
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan

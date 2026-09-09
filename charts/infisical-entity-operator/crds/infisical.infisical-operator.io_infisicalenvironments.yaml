@@ -4,21 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: infisicalconnections.infisical.infisical-operator.io
+  name: infisicalenvironments.infisical.infisical-operator.io
 spec:
   group: infisical.infisical-operator.io
   names:
-    kind: InfisicalConnection
-    listKind: InfisicalConnectionList
-    plural: infisicalconnections
-    singular: infisicalconnection
+    kind: InfisicalEnvironment
+    listKind: InfisicalEnvironmentList
+    plural: infisicalenvironments
+    singular: infisicalenvironment
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: InfisicalConnection is the Schema for the infisicalconnections
-          API
+        description: InfisicalEnvironment is the Schema for the infisicalenvironments
+          API.
         properties:
           apiVersion:
             description: |-
@@ -38,44 +38,81 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of InfisicalConnection
+            description: Spec defines the desired state of InfisicalEnvironment.
             properties:
-              authSecretRef:
-                description: |-
-                  AuthSecretRef references a Secret containing a bearer token under Key.
-                  The Secret must be in the same namespace as this connection.
+              connectionRef:
+                description: ConnectionRef selects the Infisical API connection.
                 properties:
-                  key:
-                    description: Key is the Secret data key.
-                    minLength: 1
-                    type: string
                   name:
-                    description: Name is the Secret name.
+                    description: Name is the InfisicalConnection name.
                     minLength: 1
                     type: string
                 required:
                 - name
                 type: object
-              hostAPI:
-                default: https://app.infisical.com/api
-                description: |-
-                  HostAPI is the Infisical API base URL, including the /api path.
-                  It defaults to Infisical Cloud.
-                pattern: ^https?://
+              creationPolicy:
+                default: Create
+                description: CreationPolicy controls whether the operator creates
+                  or adopts an environment.
+                enum:
+                - Create
+                - Adopt
+                - CreateOrAdopt
                 type: string
-              requestTimeout:
-                default: 30s
-                description: RequestTimeout bounds each request made to Infisical.
+              deletionPolicy:
+                default: Orphan
+                description: DeletionPolicy controls whether the external environment
+                  is deleted with this resource.
+                enum:
+                - Delete
+                - Orphan
+                type: string
+              environmentName:
+                description: EnvironmentName is the Infisical environment display
+                  name. If omitted, metadata.name is used.
+                maxLength: 255
+                minLength: 1
+                type: string
+              position:
+                description: Position controls the environment order. Lower values
+                  appear first.
+                format: int32
+                minimum: 1
+                type: integer
+              projectRef:
+                description: ProjectRef references the InfisicalProject that owns
+                  this environment.
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              slug:
+                description: Slug is the stable Infisical environment slug. If omitted,
+                  metadata.name is used.
+                maxLength: 64
+                minLength: 1
                 type: string
             required:
-            - authSecretRef
+            - connectionRef
+            - projectRef
             type: object
+            x-kubernetes-validations:
+            - message: connectionRef is immutable; delete and recreate the InfisicalEnvironment
+              rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
+            - message: projectRef is immutable; delete and recreate the InfisicalEnvironment
+              rule: '!has(oldSelf.projectRef) || self.projectRef == oldSelf.projectRef'
+            - message: slug is immutable; delete and recreate the InfisicalEnvironment
+              rule: '!has(oldSelf.slug) || self.slug == oldSelf.slug'
           status:
-            description: status defines the observed state of InfisicalConnection
+            description: Status defines the observed state of InfisicalEnvironment.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the connection.
+                  of the environment.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -134,11 +171,28 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              environmentID:
+                description: EnvironmentID is the immutable Infisical identifier once
+                  created or adopted.
+                type: string
+              name:
+                description: Name is the observed Infisical environment display name.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation reflected
                   in status.
                 format: int64
                 type: integer
+              position:
+                description: Position is the observed environment order.
+                format: int32
+                type: integer
+              projectID:
+                description: ProjectID is the observed owning project identifier.
+                type: string
+              slug:
+                description: Slug is the observed Infisical environment slug.
+                type: string
             type: object
         required:
         - spec

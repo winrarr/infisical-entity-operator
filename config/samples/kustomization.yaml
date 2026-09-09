@@ -2,3 +2,6 @@ resources:
   - infisical_v1alpha1_infisicalconnection.yaml
   - infisical_v1alpha1_infisicalproject.yaml
   - infisical_v1alpha1_infisicalidentity.yaml
+  - infisical_v1alpha1_infisicalenvironment.yaml
+  - infisical_v1alpha1_infisicalkubernetesauth.yaml
+  - infisical_v1alpha1_infisicalprojectrole.yaml

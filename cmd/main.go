@@ -186,6 +186,27 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "InfisicalIdentity")
 		os.Exit(1)
 	}
+	if err := (&infisicalcontroller.InfisicalEnvironmentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "InfisicalEnvironment")
+		os.Exit(1)
+	}
+	if err := (&infisicalcontroller.InfisicalKubernetesAuthReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "InfisicalKubernetesAuth")
+		os.Exit(1)
+	}
+	if err := (&infisicalcontroller.InfisicalProjectRoleReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "InfisicalProjectRole")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

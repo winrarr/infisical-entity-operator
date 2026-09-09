@@ -31,3 +31,12 @@ resources:
 - infisical_infisicalconnection_admin_role.yaml
 - infisical_infisicalconnection_editor_role.yaml
 - infisical_infisicalconnection_viewer_role.yaml
+- infisical_infisicalenvironment_admin_role.yaml
+- infisical_infisicalenvironment_editor_role.yaml
+- infisical_infisicalenvironment_viewer_role.yaml
+- infisical_infisicalkubernetesauth_admin_role.yaml
+- infisical_infisicalkubernetesauth_editor_role.yaml
+- infisical_infisicalkubernetesauth_viewer_role.yaml
+- infisical_infisicalprojectrole_admin_role.yaml
+- infisical_infisicalprojectrole_editor_role.yaml
+- infisical_infisicalprojectrole_viewer_role.yaml

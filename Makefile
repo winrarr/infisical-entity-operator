@@ -221,7 +221,9 @@ kind-load-image: ## Load IMG into the isolated Kind cluster.
 	"$(KIND)" load docker-image "$(IMG)" --name "$(KIND_CLUSTER)"
 
 .PHONY: kind-refresh
-kind-refresh: docker-build kind-load-image deploy ## Build, load, and upgrade the operator in Kind.
+kind-refresh: docker-build kind-load-image deploy ## Build, load, and restart the operator in Kind.
+	"$(KUBECTL)" -n "$(OPERATOR_NAMESPACE)" rollout restart deployment --selector=app.kubernetes.io/instance=$(PROJECT_NAME)
+	"$(KUBECTL)" -n "$(OPERATOR_NAMESPACE)" rollout status deployment --selector=app.kubernetes.io/instance=$(PROJECT_NAME) --timeout=5m
 
 .PHONY: kind-e2e
 kind-e2e: kind-deploy ## Run the live Infisical reconciliation and network-policy test.

@@ -1,0 +1,361 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: infisicalkubernetesauths.infisical.infisical-operator.io
+spec:
+  group: infisical.infisical-operator.io
+  names:
+    kind: InfisicalKubernetesAuth
+    listKind: InfisicalKubernetesAuthList
+    plural: infisicalkubernetesauths
+    singular: infisicalkubernetesauth
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: InfisicalKubernetesAuth is the Schema for the infisicalkubernetesauths
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of InfisicalKubernetesAuth.
+            properties:
+              accessTokenMaxTTL:
+                description: AccessTokenMaxTTL is the maximum access token lifetime
+                  in seconds.
+                format: int64
+                maximum: 315360000
+                minimum: 0
+                type: integer
+              accessTokenNumUsesLimit:
+                description: AccessTokenNumUsesLimit limits access token uses. Zero
+                  means unlimited.
+                format: int64
+                minimum: 0
+                type: integer
+              accessTokenTTL:
+                description: AccessTokenTTL is the access token lifetime in seconds.
+                format: int64
+                maximum: 315360000
+                minimum: 0
+                type: integer
+              accessTokenTrustedIPs:
+                description: AccessTokenTrustedIPs limits where issued access tokens
+                  may be used.
+                items:
+                  description: KubernetesTrustedIP identifies an IP address or CIDR
+                    range allowed to use an access token.
+                  properties:
+                    ipAddress:
+                      description: IPAddress is an IP address or CIDR range.
+                      minLength: 1
+                      type: string
+                  required:
+                  - ipAddress
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              allowedAudience:
+                description: AllowedAudience is the optional audience required in
+                  the service account token.
+                maxLength: 1000
+                type: string
+              allowedNames:
+                description: AllowedNames lists the service account names trusted
+                  to authenticate.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
+              allowedNamespaces:
+                description: AllowedNamespaces lists the Kubernetes namespaces trusted
+                  to authenticate.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
+              caCertSecretRef:
+                description: CACertSecretRef references a Secret containing the PEM-encoded
+                  Kubernetes API CA certificate.
+                properties:
+                  key:
+                    description: Key is the Secret data key.
+                    minLength: 1
+                    type: string
+                  name:
+                    description: Name is the Secret name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              connectionRef:
+                description: ConnectionRef selects the Infisical API connection.
+                properties:
+                  name:
+                    description: Name is the InfisicalConnection name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              creationPolicy:
+                default: Create
+                description: CreationPolicy controls whether the operator attaches
+                  or adopts Kubernetes Auth.
+                enum:
+                - Create
+                - Adopt
+                - CreateOrAdopt
+                type: string
+              deletionPolicy:
+                default: Orphan
+                description: DeletionPolicy controls whether the remote auth method
+                  is removed with this resource.
+                enum:
+                - Delete
+                - Orphan
+                type: string
+              gatewayID:
+                description: GatewayID selects an Infisical gateway for token review
+                  when gateway mode is used.
+                type: string
+              gatewayPoolID:
+                description: GatewayPoolID selects an Infisical gateway pool for token
+                  review when gateway mode is used.
+                type: string
+              identityRef:
+                description: IdentityRef references the InfisicalIdentity receiving
+                  this auth method.
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              kubernetesHost:
+                description: KubernetesHost is the Kubernetes API server URL Infisical
+                  uses for token review.
+                maxLength: 255
+                type: string
+              tokenReviewMode:
+                default: api
+                description: TokenReviewMode selects the API-server or gateway token
+                  review path.
+                enum:
+                - api
+                - gateway
+                type: string
+              tokenReviewerJWTSecretRef:
+                description: |-
+                  TokenReviewerJWTSecretRef references a Secret containing a token for the Kubernetes TokenReview API.
+                  If omitted, Infisical can use the authenticating workload token when configured for that mode.
+                properties:
+                  key:
+                    description: Key is the Secret data key.
+                    minLength: 1
+                    type: string
+                  name:
+                    description: Name is the Secret name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              verifyTLSCertificate:
+                description: VerifyTLSCertificate controls Kubernetes API server certificate
+                  verification.
+                type: boolean
+            required:
+            - allowedNames
+            - allowedNamespaces
+            - connectionRef
+            - identityRef
+            type: object
+            x-kubernetes-validations:
+            - message: connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth
+              rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
+            - message: identityRef is immutable; delete and recreate the InfisicalKubernetesAuth
+              rule: '!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef'
+          status:
+            description: Status defines the observed state of InfisicalKubernetesAuth.
+            properties:
+              accessTokenMaxTTL:
+                description: AccessTokenMaxTTL is the observed maximum access token
+                  lifetime in seconds.
+                format: int64
+                type: integer
+              accessTokenNumUsesLimit:
+                description: AccessTokenNumUsesLimit is the observed access token
+                  use limit.
+                format: int64
+                type: integer
+              accessTokenTTL:
+                description: AccessTokenTTL is the observed access token lifetime
+                  in seconds.
+                format: int64
+                type: integer
+              accessTokenTrustedIPs:
+                description: AccessTokenTrustedIPs is the observed access token IP
+                  allowlist.
+                items:
+                  description: KubernetesTrustedIP identifies an IP address or CIDR
+                    range allowed to use an access token.
+                  properties:
+                    ipAddress:
+                      description: IPAddress is an IP address or CIDR range.
+                      minLength: 1
+                      type: string
+                  required:
+                  - ipAddress
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              allowedAudience:
+                description: AllowedAudience is the observed token audience.
+                type: string
+              allowedNames:
+                description: AllowedNames is the observed service account allowlist.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              allowedNamespaces:
+                description: AllowedNamespaces is the observed namespace allowlist.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              authID:
+                description: AuthID is the immutable Infisical auth method identifier
+                  once attached or adopted.
+                type: string
+              conditions:
+                description: Conditions represent the latest available observations
+                  of Kubernetes Auth.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              gatewayID:
+                description: GatewayID is the observed gateway identifier.
+                type: string
+              gatewayPoolID:
+                description: GatewayPoolID is the observed gateway pool identifier.
+                type: string
+              hasCACertificate:
+                description: HasCACertificate reports whether a CA certificate is
+                  configured without exposing it.
+                type: boolean
+              hasTokenReviewerJWT:
+                description: HasTokenReviewerJWT reports whether a reviewer JWT is
+                  configured without exposing it.
+                type: boolean
+              identityID:
+                description: IdentityID is the observed target identity identifier.
+                type: string
+              kubernetesHost:
+                description: KubernetesHost is the observed Kubernetes API server
+                  URL.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation reflected
+                  in status.
+                format: int64
+                type: integer
+              tokenReviewMode:
+                description: TokenReviewMode is the observed token review mode.
+                enum:
+                - api
+                - gateway
+                type: string
+              verifyTLSCertificate:
+                description: VerifyTLSCertificate reports whether the Kubernetes API
+                  certificate is verified.
+                type: boolean
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
