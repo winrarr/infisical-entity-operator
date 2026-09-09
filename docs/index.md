@@ -1,3 +1,7 @@
+---
+title: Overview
+---
+
 # Infisical Entity Operator
 
 Kubernetes-native lifecycle management for Infisical projects, environments, project roles, machine identities, and Kubernetes Auth.
