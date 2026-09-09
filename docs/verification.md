@@ -11,12 +11,14 @@ This project has both local controller tests and a disposable live environment. 
 | `make test` | Generation is current enough to compile, static vetting passes, and unit/HTTP contract tests pass. |
 | `make lint-config lint` | The linter configuration and Go implementation pass golangci-lint. |
 | `make helm-lint` | The operator Helm chart is structurally valid. |
-| `make check` | The complete local static suite: generation, formatting, vet, tests, lint, and Helm lint. |
+| `make generate-api-reference` | The generated CRD field reference reflects the Go API definitions. |
+| `make docs-build` | The generated API reference and Zensical site build succeed with strict link validation. |
+| `make check` | The complete local static suite: generation, formatting, vet, tests, lint, Helm lint, and documentation build. |
 | `make build` | The controller binary can be built from the current source and generated artifacts. |
 | `make kind-e2e` | The disposable Kind cluster can run Cilium, Infisical, the chart, the operator, the egress policy, and the live reconciliation path. |
 | `make kind-down` | Only the named disposable Kind cluster is removed. |
 
-CI uses the same repository commands: the test workflow checks generated output and runs `make test`, the lint workflow runs `make lint-config lint helm-lint`, and the e2e workflow runs `make kind-e2e` followed by cleanup.
+CI uses the same repository commands: the test workflow checks generated output and runs `make test`, the lint workflow runs `make lint-config lint helm-lint`, the docs workflow runs `make docs-build` and deploys the result from `main`, and the e2e workflow runs `make kind-e2e` followed by cleanup.
 
 ## kstatus compatibility
 
@@ -34,6 +36,6 @@ Kubernetes Auth allow/deny login checks run only when the live API accepts the c
 
 ## Generated output and repository hygiene
 
-API types and controller markers are source files. `api/infisical/v1alpha1/zz_generated.deepcopy.go`, `config/crd/bases/`, `config/rbac/role.yaml`, and `charts/infisical-entity-operator/crds/` plus the chart ClusterRole copy are derived. Run `make manifests generate` after marker or API changes, then use `make verify-generated` to detect drift.
+API types and controller markers are source files. `api/infisical/v1alpha1/zz_generated.deepcopy.go`, `config/crd/bases/`, `config/rbac/role.yaml`, `charts/infisical-entity-operator/crds/`, the chart ClusterRole copy, and `docs/reference/api.md` are derived. Run `make manifests generate` after marker or API changes, then use `make verify-generated` to detect drift.
 
 Do not commit `bin/`, `dist/`, `tmp/`, coverage profiles, kubeconfig files, local cluster state, bootstrap credentials, or any Infisical token. A test that passes after leaking one of these is not acceptable evidence.

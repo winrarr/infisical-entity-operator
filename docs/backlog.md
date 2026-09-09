@@ -2,33 +2,6 @@
 
 Items are ordered by current priority and should be refined against the current Infisical API before implementation. Only incomplete work belongs here: remove an item once its acceptance criteria are met. Preserve lasting rationale in an ADR or the relevant design/operations document, and record unresolved current shortcomings in the [tech-debt register](tech-debt.md).
 
-## BL-005: Publish GitHub Pages documentation
-
-Status: planned.
-
-### Goal
-
-Publish the project documentation on GitHub Pages as one documentation deliverable, with the repository Markdown remaining the source of truth.
-
-### Rationale
-
-The project now has product, architecture, operations, research, and decision documentation that should be discoverable without browsing the repository directly.
-
-### Constraints
-
-- Keep documentation and the publishing workflow in this repository.
-- Do not place credentials, generated Infisical tokens, kubeconfigs, or private environment data in the published site.
-- Preserve direct links to the README, API examples, Helm installation, local Kind workflow, network-policy behavior, and security boundaries.
-- Choose a maintained static documentation tool only if it materially improves navigation and generated API reference; avoid adding unnecessary runtime infrastructure.
-
-### Acceptance criteria
-
-- A GitHub Actions workflow builds and deploys the documentation to the repository’s GitHub Pages site.
-- The published site has navigable sections for getting started, installation, CRDs, architecture, operations, security, development, and troubleshooting.
-- The README links to the site, and the site links back to the repository and relevant source documents.
-- Documentation publication is tested on documentation changes and fails clearly when links or the site build are invalid.
-- The site contains no credentials or environment-specific local-cluster state.
-
 ## BL-006: Evaluate and harden multi-tenancy
 
 Status: evaluation pending.

@@ -7,6 +7,9 @@ LOCALBIN ?= $(PROJECT_DIR)/bin
 
 IMG ?= ghcr.io/winrarr/infisical-entity-operator:dev
 CONTAINER_TOOL ?= docker
+DOCS_CONTAINER_IMAGE ?= zensical/zensical:0.0.59
+DOCS_CONTAINER_MOUNTS = -v "$(PROJECT_DIR)":/docs
+DOCS_CONFIG ?= zensical.toml
 KUBECTL ?= kubectl
 KIND ?= $(LOCALBIN)/kind
 HELM ?= helm
@@ -24,9 +27,11 @@ KIND_VERSION ?= v0.33.0
 
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 KUSTOMIZE_VERSION ?= v5.8.1
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
+CRD_REF_DOCS_VERSION ?= v0.3.0
 GOLANGCI_LINT_VERSION ?= v2.13.2
 
 GO := GOTOOLCHAIN=$(GO_TOOLCHAIN) go
@@ -53,8 +58,9 @@ format-check: ## Fail when Go sources are not gofmt-clean.
 	if [ -n "$$files" ]; then echo "Go sources need formatting:" >&2; echo "$$files" >&2; exit 1; fi
 
 .PHONY: generate
-generate: controller-gen ## Generate Go deepcopy code.
+generate: controller-gen crd-ref-docs ## Generate Go and documentation artifacts.
 	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(MAKE) generate-api-reference
 
 .PHONY: manifests
 manifests: controller-gen ## Generate CRDs and RBAC from API/controller markers.
@@ -70,7 +76,7 @@ sync-chart-generated: ## Copy generated CRDs and RBAC into the Helm chart.
 
 .PHONY: verify-generated
 verify-generated: manifests generate ## Verify committed generated artifacts are current.
-	@git diff --exit-code -- api/infisical/v1alpha1/zz_generated.deepcopy.go config/crd/bases config/rbac/role.yaml charts/infisical-entity-operator/crds charts/infisical-entity-operator/templates/clusterrole.yaml
+	@git diff --exit-code -- api/infisical/v1alpha1/zz_generated.deepcopy.go config/crd/bases config/rbac/role.yaml charts/infisical-entity-operator/crds charts/infisical-entity-operator/templates/clusterrole.yaml docs/reference/api.md
 
 .PHONY: vet
 vet: ## Run go vet.
@@ -96,8 +102,30 @@ lint-config: golangci-lint ## Validate the golangci-lint configuration.
 helm-lint: ## Lint the operator Helm chart.
 	$(HELM) lint charts/infisical-entity-operator
 
+.PHONY: generate-api-reference
+generate-api-reference: crd-ref-docs ## Generate the CRD API reference.
+	@mkdir -p docs/reference
+	"$(CRD_REF_DOCS)" \
+		--config hack/crd-ref-docs.yaml \
+		--renderer markdown \
+		--source-path ./api \
+		--output-path docs/reference/api.md
+	@awk '{ lines[NR] = $$0 } END { last = NR; while (last > 0 && lines[last] == "") last--; for (i = 1; i <= last; i++) print lines[i] }' docs/reference/api.md > docs/reference/api.md.tmp
+	@mv docs/reference/api.md.tmp docs/reference/api.md
+
+.PHONY: build-docs-site
+build-docs-site: generate-api-reference ## Build the documentation site with strict link validation.
+	$(CONTAINER_TOOL) run --rm $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) build --strict --config-file $(DOCS_CONFIG)
+
+.PHONY: docs-build
+docs-build: build-docs-site ## Generate the API reference and build the documentation site.
+
+.PHONY: docs-serve
+docs-serve: generate-api-reference ## Generate and serve the documentation site locally.
+	$(CONTAINER_TOOL) run --rm -p 8000:8000 $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) serve --dev-addr 0.0.0.0:8000 --config-file $(DOCS_CONFIG)
+
 .PHONY: check
-check: manifests generate format-check vet test lint-config lint helm-lint ## Run the complete local verification suite.
+check: manifests generate format-check vet test lint-config lint helm-lint docs-build ## Run the complete local verification suite.
 
 ##@ Build
 
@@ -252,6 +280,12 @@ controller-gen: $(CONTROLLER_GEN) ## Download the pinned controller-gen binary.
 
 $(CONTROLLER_GEN): $(LOCALBIN)
 	$(call go-install-tool,$@,sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+$(CRD_REF_DOCS): $(LOCALBIN)
+	$(call go-install-tool,$@,github.com/elastic/crd-ref-docs,$(CRD_REF_DOCS_VERSION))
+
+.PHONY: crd-ref-docs
+crd-ref-docs: $(CRD_REF_DOCS) ## Download the pinned CRD reference generator.
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download the pinned golangci-lint binary.

@@ -1,6 +1,18 @@
-# Documentation map
+# Infisical Entity Operator
 
-Start with the [README](../README.md) for the product summary, installation, and the shortest local development path.
+Kubernetes-native lifecycle management for Infisical projects, environments, project roles, machine identities, and Kubernetes Auth.
+
+Start with the [quickstart](quickstart.md), or read the [README](https://github.com/winrarr/infisical-entity-operator/blob/main/README.md) for the concise product summary. The [source repository](https://github.com/winrarr/infisical-entity-operator) contains the chart, examples, tests, and implementation.
+
+The operator reconciles a dependency-aware resource graph:
+
+```text
+InfisicalConnection → InfisicalProject → InfisicalEnvironment
+                                      ├→ InfisicalProjectRole
+                                      └→ InfisicalIdentity → InfisicalKubernetesAuth
+```
+
+Secret synchronization is intentionally outside this project. Use Infisical’s official Kubernetes operator for workloads that need secrets materialized into Kubernetes Secrets.
 
 ## Product and design
 
@@ -16,4 +28,4 @@ Start with the [README](../README.md) for the product summary, installation, and
 - [Backlog](backlog.md): planned outcomes that are not implemented.
 - [Tech-debt register](tech-debt.md): known current shortcomings and exit criteria.
 
-The repository Markdown is the current documentation source of truth. GitHub Pages publication remains a backlog item.
+The repository Markdown is the documentation source of truth. The [published documentation site](https://winrarr.github.io/infisical-entity-operator/) is built from these files on every change to the documentation, API definitions, or documentation workflow.

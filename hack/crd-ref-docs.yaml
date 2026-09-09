@@ -1,0 +1,10 @@
+processor:
+  ignoreTypes:
+    - ".*List$"
+    - ".*Status$"
+  ignoreFields:
+    - "TypeMeta$"
+    - "ObjectMeta$"
+render:
+  # renovate: datasource=go depName=k8s.io/api
+  kubernetesVersion: "1.37"

@@ -1,0 +1,77 @@
+[project]
+site_name = "Infisical Entity Operator"
+site_description = "Kubernetes-native lifecycle management for Infisical control-plane entities."
+site_url = "https://winrarr.github.io/infisical-entity-operator/"
+docs_dir = "docs"
+site_dir = "site"
+repo_url = "https://github.com/winrarr/infisical-entity-operator"
+repo_name = "winrarr/infisical-entity-operator"
+edit_uri = "edit/main/docs/"
+strict = true
+nav = [
+  { "Introduction" = [
+    { "Overview" = "index.md" },
+    { "Quickstart" = "quickstart.md" },
+    { "Installation" = "introduction/installation.md" },
+    { "Concepts" = "introduction/concepts.md" },
+  ] },
+  { "Guides" = [
+    { "Lifecycle and Ownership" = "reference/deletion-and-ownership.md" },
+    { "Security" = "reference/security.md" },
+    { "Troubleshooting" = "reference/troubleshooting.md" },
+    { "Examples" = "examples/index.md" },
+  ] },
+  { "Reference" = [
+    { "Overview" = "reference/index.md" },
+    { "Resources" = "reference/resources.md" },
+    { "Status and Conditions" = "reference/status-and-conditions.md" },
+    { "Custom Resources" = [
+      { "Overview" = "crds/index.md" },
+      { "InfisicalConnection" = "crds/infisical-connection.md" },
+      { "InfisicalProject" = "crds/infisical-project.md" },
+      { "InfisicalEnvironment" = "crds/infisical-environment.md" },
+      { "InfisicalProjectRole" = "crds/infisical-project-role.md" },
+      { "InfisicalIdentity" = "crds/infisical-identity.md" },
+      { "InfisicalKubernetesAuth" = "crds/infisical-kubernetes-auth.md" },
+    ] },
+    { "Generated API Reference" = "reference/api.md" },
+  ] },
+  { "Architecture" = [
+    { "Architecture" = "architecture.md" },
+    { "Decisions" = "decisions/index.md" },
+  ] },
+  { "Operations" = [
+    { "Local Kind" = "operations/local-kind.md" },
+  ] },
+  { "Project" = [
+    { "Product Scope" = "product.md" },
+    { "Backlog" = "backlog.md" },
+    { "Tech Debt" = "tech-debt.md" },
+    { "Verification" = "verification.md" },
+    { "Research" = "research/2026-09-09-infisical-api-and-versions.md" },
+  ] },
+  { "Development" = [
+    { "Overview" = "contributing/index.md" },
+    { "Local Development" = "contributing/local-development.md" },
+    { "Documentation" = "contributing/documentation.md" },
+  ] },
+]
+
+[project.theme]
+features = [
+  "navigation.instant",
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.tracking",
+  "navigation.top",
+  "navigation.indexes",
+  "search.highlight",
+  "search.suggest",
+  "content.code.copy",
+  "content.action.edit",
+  "content.action.view",
+]
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true

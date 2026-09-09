@@ -91,6 +91,8 @@ This creates an isolated Kind cluster with Cilium, installs the official Infisic
 
 See the [documentation map](docs/index.md), [product scope](docs/product.md), [architecture](docs/architecture.md), [verification guide](docs/verification.md), [backlog](docs/backlog.md), [tech-debt register](docs/tech-debt.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
 
+The [published documentation site](https://winrarr.github.io/infisical-entity-operator/) provides the navigable reference and quickstart.
+
 ## Contributing
 
 Run `make check` before submitting a change. API marker changes require `make manifests generate`; generated output is checked into the repository so installation and review are self-contained.
