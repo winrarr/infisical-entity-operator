@@ -8,7 +8,7 @@ Status: accepted limitation
 
 ### Evidence
 
-The default Kind environment uses the standalone Infisical chart. Its local plan rejects custom project roles, and its API rejects the cluster-local Kubernetes token-review URL. The e2e script verifies those bounded error paths and the HTTP contract tests cover successful controller/client behavior, but the default local run cannot prove successful live role creation or Kubernetes Auth login.
+The default Kind environment uses the standalone Infisical chart. Its local plan rejects custom project roles, and its API rejects the cluster-local Kubernetes token-review URL. The e2e script verifies those bounded error paths and successfully exercises built-in `no-access` identity membership, while the HTTP contract tests cover successful custom-role-controller/client behavior. The default local run cannot prove successful live `InfisicalProjectRole` creation or Kubernetes Auth login.
 
 ### Impact
 

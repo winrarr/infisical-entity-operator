@@ -126,6 +126,8 @@ spec:
   projectRef:
     name: e2e-project
   identityName: e2e-identity
+  roleSlugs:
+    - no-access
   metadata:
     - key: test
       value: kind-cilium
@@ -229,10 +231,16 @@ fi
 
 project_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalproject e2e-project -o jsonpath='{.status.projectID}')"
 identity_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-identity -o jsonpath='{.status.identityID}')"
+membership_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-identity -o jsonpath='{.status.membershipID}')"
+identity_role_slug="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-identity -o jsonpath='{.status.roles[0].slug}')"
 environment_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalenvironment e2e-environment -o jsonpath='{.status.environmentID}')"
 role_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalprojectrole e2e-project-role -o jsonpath='{.status.roleID}')"
 auth_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalkubernetesauth e2e-kubernetes-auth -o jsonpath='{.status.authID}')"
-[[ -n "${project_id}" && -n "${identity_id}" && -n "${environment_id}" ]]
+if [[ -z "${project_id}" || -z "${identity_id}" || -z "${membership_id}" || "${identity_role_slug}" != "no-access" || -z "${environment_id}" ]]; then
+  echo "unexpected identity membership status: projectID=${project_id} identityID=${identity_id} membershipID=${membership_id} roleSlug=${identity_role_slug} environmentID=${environment_id}" >&2
+  "${KUBECTL}" -n "${TEST_NAMESPACE}" get infisicalidentity/e2e-identity -o yaml >&2 || true
+  exit 1
+fi
 if [[ "${project_role_available}" == true ]]; then
   [[ -n "${role_id}" ]]
 fi

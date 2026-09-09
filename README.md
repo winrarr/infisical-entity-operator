@@ -60,6 +60,8 @@ spec:
 
 An environment, project role, or Kubernetes Auth resource can reference the project or identity in the same namespace and will wait for that dependency to become ready.
 
+Set `spec.roleSlugs` on an identity to manage its permanent Infisical project roles. Omit the field to leave an existing membership unmanaged; use the built-in `no-access` role explicitly when an identity should have no project permissions.
+
 Install the chart and CRDs from a repository checkout:
 
 ```sh

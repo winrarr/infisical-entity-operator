@@ -47,6 +47,14 @@ type InfisicalIdentitySpec struct {
 	// +listMapKey=key
 	Metadata []IdentityMetadata `json:"metadata,omitempty"`
 
+	// RoleSlugs declares the permanent project role slugs assigned to the identity.
+	// When omitted, the existing project membership is not managed. Use no-access
+	// explicitly when the identity should have no project permissions.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	RoleSlugs []string `json:"roleSlugs,omitempty"`
+
 	// CreationPolicy controls whether the operator creates or adopts an identity.
 	// +optional
 	// +kubebuilder:default=Create
@@ -68,6 +76,14 @@ type InfisicalIdentityStatus struct {
 	// ProjectID is the observed owning project identifier.
 	ProjectID string `json:"projectID,omitempty"`
 
+	// MembershipID is the Infisical project membership identifier when role management is enabled.
+	MembershipID string `json:"membershipID,omitempty"`
+
+	// Roles contains the observed project roles when role management is enabled.
+	// +optional
+	// +listType=atomic
+	Roles []IdentityRoleStatus `json:"roles,omitempty"`
+
 	// ObservedGeneration is the most recent generation reflected in status.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
@@ -76,6 +92,21 @@ type InfisicalIdentityStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// IdentityRoleStatus describes an observed permanent or temporary project role.
+type IdentityRoleStatus struct {
+	// RoleID is the Infisical role assignment identifier.
+	RoleID string `json:"roleID,omitempty"`
+
+	// Slug is the built-in or custom role slug.
+	Slug string `json:"slug,omitempty"`
+
+	// Name is the custom role display name when available.
+	Name string `json:"name,omitempty"`
+
+	// IsTemporary reports whether Infisical marked the assignment as temporary.
+	IsTemporary bool `json:"isTemporary,omitempty"`
 }
 
 // +kubebuilder:printcolumn:name="Identity ID",type="string",JSONPath=".status.identityID"

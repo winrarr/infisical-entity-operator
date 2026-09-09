@@ -2,33 +2,6 @@
 
 Items are ordered by current priority and should be refined against the current Infisical API before implementation. Only incomplete work belongs here: remove an item once its acceptance criteria are met. Preserve lasting rationale in an ADR or the relevant design/operations document, and record unresolved current shortcomings in the [tech-debt register](tech-debt.md).
 
-## BL-002: Make project roles declarative for `InfisicalIdentity`
-
-Status: planned.
-
-### Goal
-
-Allow a project-scoped machine identity to declare the permanent Infisical project roles it should have.
-
-### Rationale
-
-Infisical accepts roles during identity creation, but role membership has its own read, update, and delete API. This is part of making an identity actually usable by workloads and is currently an explicit product gap.
-
-### Constraints
-
-- Extend `InfisicalIdentity` first; do not introduce a separate membership CRD until identities shared across multiple projects are supported.
-- Support permanent role assignments initially. Time-bound roles require a separate lifecycle design because relative expirations do not map cleanly to stable Kubernetes desired state.
-- Reconcile role slugs, not opaque role IDs, while recording observed role details safely in status.
-- Preserve safe orphaning by default when the Kubernetes resource is deleted.
-
-### Acceptance criteria
-
-- Identity creation, adoption, and reconciliation converge on the declared permanent role set.
-- Manual role changes are detected and corrected according to the operator’s ownership policy.
-- Role assignment and removal errors are visible through conditions and do not cause credential leakage in logs or status.
-- The controller handles an identity membership that was removed or deleted remotely without wedging the identity resource.
-- Tests cover creation, adoption, drift, dependency ordering, deletion policy, and role API error cases.
-
 ## BL-005: Publish GitHub Pages documentation
 
 Status: planned.

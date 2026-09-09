@@ -12,7 +12,7 @@ Controller manager ── bearer-token HTTP ──▶ Infisical API
     ├── InfisicalProject: external project lifecycle and observed environments
     ├── InfisicalEnvironment: project environment lifecycle
     ├── InfisicalProjectRole: project permission role lifecycle
-    ├── InfisicalIdentity: project-scoped machine identity lifecycle
+    ├── InfisicalIdentity: project-scoped machine identity and permanent role membership lifecycle
     └── InfisicalKubernetesAuth: Kubernetes service-account authentication configuration
 ```
 
@@ -31,8 +31,9 @@ Names are used only for the initial adopt lookup. A project is matched by reques
 3. Resolve the connection Secret and construct a client with the configured timeout.
 4. Resolve the Kubernetes dependency when applicable, and resolve auth-method Secrets without placing their contents in status.
 5. Adopt if allowed and no external ID is recorded; otherwise create if allowed.
-6. Read by external ID or identity, patch mutable fields when they drift, write status, and schedule a periodic drift check.
-7. Set a dependency or external failure condition and requeue with a shorter dependency delay or longer external delay.
+6. Read by external ID or identity, patch mutable fields when they drift, and for an identity with `roleSlugs` reconcile the project membership through Infisical’s identity-membership API.
+7. Write status and schedule a periodic drift check.
+8. Set a dependency or external failure condition and requeue with a shorter dependency delay or longer external delay.
 
 ## Failure and security model
 

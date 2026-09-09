@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -385,4 +386,59 @@ func identityMetadataEqual(want []infisicalv1alpha1.IdentityMetadata, current []
 		}
 	}
 	return true
+}
+
+func identityRoleSlugs(spec []string) ([]string, error) {
+	if len(spec) == 0 {
+		return nil, nil
+	}
+
+	roleSlugs := append([]string(nil), spec...)
+	seen := make(map[string]struct{}, len(roleSlugs))
+	for _, slug := range roleSlugs {
+		if strings.TrimSpace(slug) == "" {
+			return nil, errors.New("roleSlugs cannot contain an empty value")
+		}
+		if _, exists := seen[slug]; exists {
+			return nil, fmt.Errorf("roleSlugs contains duplicate value %q", slug)
+		}
+		seen[slug] = struct{}{}
+	}
+	sort.Strings(roleSlugs)
+	return roleSlugs, nil
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func identityRoleSlugsEqual(want []string, current []infisicalclient.IdentityMembershipRole) bool {
+	observed := make([]string, 0, len(current))
+	for _, role := range current {
+		if role.IsTemporary {
+			return false
+		}
+		observed = append(observed, role.Slug())
+	}
+	sort.Strings(observed)
+	return reflect.DeepEqual(want, observed)
+}
+
+func identityRoleStatusesFrom(roles []infisicalclient.IdentityMembershipRole) []infisicalv1alpha1.IdentityRoleStatus {
+	observed := make([]infisicalv1alpha1.IdentityRoleStatus, 0, len(roles))
+	for _, role := range roles {
+		observed = append(observed, infisicalv1alpha1.IdentityRoleStatus{
+			RoleID:      role.ID,
+			Slug:        role.Slug(),
+			Name:        role.Name(),
+			IsTemporary: role.IsTemporary,
+		})
+	}
+	sort.Slice(observed, func(i, j int) bool { return observed[i].Slug < observed[j].Slug })
+	return observed
 }

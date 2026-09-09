@@ -8,7 +8,7 @@ This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1a
 - `InfisicalProject` creates, adopts, updates, observes, and optionally deletes an Infisical project.
 - `InfisicalEnvironment` creates, adopts, updates, observes, and optionally deletes a project environment.
 - `InfisicalProjectRole` creates, adopts, updates, observes, and optionally deletes a project permission role.
-- `InfisicalIdentity` creates, adopts, updates, observes, and optionally deletes a project-scoped machine identity.
+- `InfisicalIdentity` creates, adopts, updates, observes, and optionally deletes a project-scoped machine identity, including optional permanent project-role membership.
 - `InfisicalKubernetesAuth` attaches, adopts, updates, observes, and optionally removes Kubernetes Auth from a machine identity.
 
 Reconciliation lives in `internal/controller/infisical`; the intentionally small HTTP client lives in `internal/infisicalclient`. The Helm chart under `charts/infisical-entity-operator` is the primary installation path. Kustomize manifests under `config/` remain useful for CRD installation and bundle generation.

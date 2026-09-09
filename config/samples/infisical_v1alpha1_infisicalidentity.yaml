@@ -8,6 +8,8 @@ spec:
   projectRef:
     name: payments
   identityName: payments-workload
+  roleSlugs:
+    - payments-secret-reader
   metadata:
     - key: owner
       value: platform

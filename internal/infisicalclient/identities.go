@@ -40,6 +40,55 @@ type Identity struct {
 	Metadata            []IdentityMetadata `json:"metadata"`
 }
 
+// IdentityMembershipRole is a role assigned to a project identity membership.
+type IdentityMembershipRole struct {
+	ID                   string `json:"id,omitempty"`
+	Role                 string `json:"role,omitempty"`
+	IsTemporary          bool   `json:"isTemporary,omitempty"`
+	CustomRoleID         string `json:"customRoleId,omitempty"`
+	CustomRoleName       string `json:"customRoleName,omitempty"`
+	CustomRoleSlug       string `json:"customRoleSlug,omitempty"`
+	TemporaryMode        string `json:"temporaryMode,omitempty"`
+	TemporaryRange       string `json:"temporaryRange,omitempty"`
+	TemporaryAccessStart string `json:"temporaryAccessStartTime,omitempty"`
+	TemporaryAccessEnd   string `json:"temporaryAccessEndTime,omitempty"`
+}
+
+// Slug returns the stable built-in or custom role slug.
+func (role IdentityMembershipRole) Slug() string {
+	if role.CustomRoleSlug != "" {
+		return role.CustomRoleSlug
+	}
+	return role.Role
+}
+
+// Name returns the most specific available role name.
+func (role IdentityMembershipRole) Name() string {
+	if role.CustomRoleName != "" {
+		return role.CustomRoleName
+	}
+	return role.Role
+}
+
+// IdentityMembership is a project identity membership and its assigned roles.
+type IdentityMembership struct {
+	ID         string                   `json:"id"`
+	ProjectID  string                   `json:"projectId"`
+	IdentityID string                   `json:"identityId"`
+	Roles      []IdentityMembershipRole `json:"roles"`
+}
+
+// IdentityMembershipRoleRequest is one permanent role assignment request.
+type IdentityMembershipRoleRequest struct {
+	Role        string `json:"role"`
+	IsTemporary bool   `json:"isTemporary"`
+}
+
+// IdentityMembershipRequest is the supported permanent role assignment surface.
+type IdentityMembershipRequest struct {
+	Roles []IdentityMembershipRoleRequest `json:"roles"`
+}
+
 // CreateIdentityRequest is the supported identity creation surface.
 type CreateIdentityRequest struct {
 	Name                string             `json:"name"`
@@ -140,9 +189,69 @@ func (c *Client) DeleteIdentity(ctx context.Context, projectID, identityID strin
 	return c.do(ctx, http.MethodDelete, path, nil, nil, nil)
 }
 
+// GetIdentityMembership retrieves an identity's project membership and roles.
+func (c *Client) GetIdentityMembership(ctx context.Context, projectID, identityID string) (*IdentityMembership, error) {
+	var response struct {
+		IdentityMembership IdentityMembership `json:"identityMembership"`
+	}
+	path := "/v1/projects/" + url.PathEscape(projectID) + "/memberships/identities/" + url.PathEscape(identityID)
+	if err := c.do(ctx, http.MethodGet, path, nil, nil, &response); err != nil {
+		return nil, err
+	}
+	if err := validateIdentityMembership(&response.IdentityMembership); err != nil {
+		return nil, err
+	}
+	return &response.IdentityMembership, nil
+}
+
+// CreateIdentityMembership creates a project identity membership with permanent roles.
+func (c *Client) CreateIdentityMembership(ctx context.Context, projectID, identityID string, roleSlugs []string) (*IdentityMembership, error) {
+	var response struct {
+		IdentityMembership IdentityMembership `json:"identityMembership"`
+	}
+	path := "/v1/projects/" + url.PathEscape(projectID) + "/memberships/identities/" + url.PathEscape(identityID)
+	if err := c.do(ctx, http.MethodPost, path, nil, identityMembershipRequest(roleSlugs), &response); err != nil {
+		return nil, err
+	}
+	if err := validateIdentityMembership(&response.IdentityMembership); err != nil {
+		return nil, err
+	}
+	return &response.IdentityMembership, nil
+}
+
+// UpdateIdentityMembership replaces a project identity membership's roles.
+func (c *Client) UpdateIdentityMembership(ctx context.Context, projectID, identityID string, roleSlugs []string) (*IdentityMembership, error) {
+	var response struct {
+		IdentityMembership IdentityMembership `json:"identityMembership"`
+	}
+	path := "/v1/projects/" + url.PathEscape(projectID) + "/memberships/identities/" + url.PathEscape(identityID)
+	if err := c.do(ctx, http.MethodPatch, path, nil, identityMembershipRequest(roleSlugs), &response); err != nil {
+		return nil, err
+	}
+	if err := validateIdentityMembership(&response.IdentityMembership); err != nil {
+		return nil, err
+	}
+	return &response.IdentityMembership, nil
+}
+
+func identityMembershipRequest(roleSlugs []string) IdentityMembershipRequest {
+	roles := make([]IdentityMembershipRoleRequest, 0, len(roleSlugs))
+	for _, slug := range roleSlugs {
+		roles = append(roles, IdentityMembershipRoleRequest{Role: slug})
+	}
+	return IdentityMembershipRequest{Roles: roles}
+}
+
 func validateIdentity(identity *Identity) error {
 	if identity.ID == "" {
 		return fmt.Errorf("infisical API returned an identity without an ID")
+	}
+	return nil
+}
+
+func validateIdentityMembership(membership *IdentityMembership) error {
+	if membership.ID == "" {
+		return fmt.Errorf("infisical API returned an identity membership without an ID")
 	}
 	return nil
 }

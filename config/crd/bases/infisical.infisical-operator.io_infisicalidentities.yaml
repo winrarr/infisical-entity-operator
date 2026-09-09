@@ -109,6 +109,16 @@ spec:
                 required:
                 - name
                 type: object
+              roleSlugs:
+                description: |-
+                  RoleSlugs declares the permanent project role slugs assigned to the identity.
+                  When omitted, the existing project membership is not managed. Use no-access
+                  explicitly when the identity should have no project permissions.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
             required:
             - connectionRef
             - projectRef
@@ -186,6 +196,10 @@ spec:
                 description: IdentityID is the immutable Infisical identifier once
                   created or adopted.
                 type: string
+              membershipID:
+                description: MembershipID is the Infisical project membership identifier
+                  when role management is enabled.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation reflected
                   in status.
@@ -194,6 +208,29 @@ spec:
               projectID:
                 description: ProjectID is the observed owning project identifier.
                 type: string
+              roles:
+                description: Roles contains the observed project roles when role management
+                  is enabled.
+                items:
+                  description: IdentityRoleStatus describes an observed permanent
+                    or temporary project role.
+                  properties:
+                    isTemporary:
+                      description: IsTemporary reports whether Infisical marked the
+                        assignment as temporary.
+                      type: boolean
+                    name:
+                      description: Name is the custom role display name when available.
+                      type: string
+                    roleID:
+                      description: RoleID is the Infisical role assignment identifier.
+                      type: string
+                    slug:
+                      description: Slug is the built-in or custom role slug.
+                      type: string
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
             type: object
         required:
         - spec

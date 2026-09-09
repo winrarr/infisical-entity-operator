@@ -18,6 +18,7 @@ package infisical
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -36,13 +37,26 @@ import (
 )
 
 const (
-	testNamespace  = "default"
-	testProject    = "demo"
-	testProjectID  = "project-1"
-	testConnection = "infisical"
-	testTokenKey   = "token"
-	testWorkload   = "workload"
+	testNamespace        = "default"
+	testProject          = "demo"
+	testProjectID        = "project-1"
+	testConnection       = "infisical"
+	testTokenKey         = "token"
+	testWorkload         = "workload"
+	testIdentityID       = "identity-1"
+	testIdentityPath     = "/api/v1/projects/project-1/identities"
+	testIdentityByIDPath = "/api/v1/projects/project-1/identities/identity-1"
+	testMembershipPath   = "/api/v1/projects/project-1/memberships/identities/identity-1"
+	testCustomReaderRole = "custom-reader"
+	testMemberRole       = "member"
 )
+
+type infisicalMembershipRequest struct {
+	Roles []struct {
+		Role        string `json:"role"`
+		IsTemporary bool   `json:"isTemporary"`
+	} `json:"roles"`
+}
 
 func testClient(t *testing.T, objects ...client.Object) client.Client {
 	t.Helper()
@@ -202,9 +216,9 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch {
-		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/identities":
+		case request.Method == http.MethodPost && request.URL.Path == testIdentityPath:
 			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/identities/identity-1":
+		case request.Method == http.MethodGet && request.URL.Path == testIdentityByIDPath:
 			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
 		default:
 			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
@@ -239,7 +253,7 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
 		t.Fatalf("get identity: %v", err)
 	}
-	if observed.Status.IdentityID != "identity-1" || observed.Status.ProjectID != testProjectID {
+	if observed.Status.IdentityID != testIdentityID || observed.Status.ProjectID != testProjectID {
 		t.Fatalf("unexpected identity status: %#v", observed.Status)
 	}
 	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
@@ -247,6 +261,282 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	}
 	if len(observed.Finalizers) != 0 {
 		t.Fatalf("expected no finalizer for default orphan policy, got %#v", observed.Finalizers)
+	}
+}
+
+func TestIdentityReconcilerCreatesPermanentRoleMembership(t *testing.T) {
+	membershipReads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testIdentityPath:
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testIdentityByIDPath:
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testMembershipPath:
+			membershipReads++
+			if membershipReads == 1 {
+				http.Error(writer, "membership not found", http.StatusNotFound)
+				return
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1","roles":[{"id":"assignment-1","role":"custom-reader","customRoleId":"role-1","customRoleName":"Custom Reader","customRoleSlug":"custom-reader","isTemporary":false},{"id":"assignment-2","role":"member","isTemporary":false}]}}`))
+		case request.Method == http.MethodPost && request.URL.Path == testMembershipPath:
+			var body infisicalMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode membership request: %v", err)
+			}
+			if len(body.Roles) != 2 || body.Roles[0].Role != testCustomReaderRole || body.Roles[1].Role != testMemberRole || body.Roles[0].IsTemporary || body.Roles[1].IsTemporary {
+				t.Errorf("unexpected membership request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1"}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testProjectID},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			RoleSlugs:     []string{testMemberRole, testCustomReaderRole},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, project, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile identity with roles: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get identity: %v", err)
+	}
+	if observed.Status.MembershipID != "membership-1" || len(observed.Status.Roles) != 2 {
+		t.Fatalf("unexpected identity membership status: %#v", observed.Status)
+	}
+	if observed.Status.Roles[0].Slug != testCustomReaderRole || observed.Status.Roles[1].Slug != testMemberRole {
+		t.Fatalf("unexpected observed role order: %#v", observed.Status.Roles)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestIdentityReconcilerAdoptsIdentityAndRoleMembership(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == testIdentityPath:
+			_, _ = writer.Write([]byte(`{"identities":[{"id":"identity-1","name":"workload","projectId":"project-1"}]}`))
+		case request.Method == http.MethodGet && request.URL.Path == testIdentityByIDPath:
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testMembershipPath:
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1","roles":[{"id":"assignment-1","role":"member","isTemporary":false}]}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testProjectID},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef:  infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			ProjectRef:     infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			CreationPolicy: infisicalv1alpha1.CreationPolicyCreateOrAdopt,
+			RoleSlugs:      []string{testMemberRole},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, project, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile adopted identity: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get identity: %v", err)
+	}
+	if observed.Status.IdentityID != testIdentityID || observed.Status.MembershipID != "membership-1" || len(observed.Status.Roles) != 1 || observed.Status.Roles[0].Slug != testMemberRole {
+		t.Fatalf("unexpected adopted identity status: %#v", observed.Status)
+	}
+}
+
+func TestIdentityReconcilerWaitsForProjectStatus(t *testing.T) {
+	connection, secret := connectionAndSecret("http://127.0.0.1")
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			RoleSlugs:     []string{testMemberRole},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, project, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile identity dependency: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get identity: %v", err)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Reason != "ProjectNotReady" || observed.Status.Conditions[0].Status != metav1.ConditionFalse {
+		t.Fatalf("expected project dependency condition, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestIdentityReconcilerAddsDeleteFinalizer(t *testing.T) {
+	connection := &infisicalv1alpha1.InfisicalConnection{
+		ObjectMeta: metav1.ObjectMeta{Name: testConnection, Namespace: testNamespace},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef:  infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			DeletionPolicy: infisicalv1alpha1.DeletionPolicyDelete,
+		},
+	}
+	kubeClient := testClient(t, connection, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile identity finalizer: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get identity: %v", err)
+	}
+	if len(observed.Finalizers) != 1 {
+		t.Fatalf("expected delete finalizer, got %#v", observed.Finalizers)
+	}
+}
+
+func TestIdentityReconcilerCorrectsRoleMembershipDrift(t *testing.T) {
+	membershipReads := 0
+	roleUpdates := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == testIdentityByIDPath:
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testMembershipPath:
+			membershipReads++
+			if membershipReads == 1 {
+				_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1","roles":[{"id":"assignment-1","role":"custom-reader","customRoleId":"role-1","customRoleName":"Custom Reader","customRoleSlug":"custom-reader","isTemporary":true}]}}`))
+				return
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1","roles":[{"id":"assignment-2","role":"custom-reader","customRoleId":"role-1","customRoleName":"Custom Reader","customRoleSlug":"custom-reader","isTemporary":false}]}}`))
+		case request.Method == http.MethodPatch && request.URL.Path == testMembershipPath:
+			roleUpdates++
+			var body infisicalMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode membership update: %v", err)
+			}
+			if len(body.Roles) != 1 || body.Roles[0].Role != testCustomReaderRole || body.Roles[0].IsTemporary {
+				t.Errorf("unexpected membership update: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1"}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testProjectID},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			RoleSlugs:     []string{testCustomReaderRole},
+		},
+		Status: infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},
+	}
+	kubeClient := testClient(t, connection, secret, project, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile identity role drift: %v", err)
+	}
+	if roleUpdates != 1 {
+		t.Fatalf("expected one role update, got %d", roleUpdates)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get identity: %v", err)
+	}
+	if len(observed.Status.Roles) != 1 || observed.Status.Roles[0].Slug != testCustomReaderRole {
+		t.Fatalf("unexpected corrected role status: %#v", observed.Status.Roles)
+	}
+}
+
+func TestIdentityReconcilerReportsRoleMembershipError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case testIdentityByIDPath:
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","projectId":"project-1"}}`))
+		case testMembershipPath:
+			http.Error(writer, "role membership unavailable", http.StatusInternalServerError)
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testProjectID},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			RoleSlugs:     []string{testCustomReaderRole},
+		},
+		Status: infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},
+	}
+	kubeClient := testClient(t, connection, secret, project, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile role membership error: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get identity: %v", err)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Reason != "RoleMembershipReconcileFailed" || observed.Status.Conditions[0].Status != metav1.ConditionFalse {
+		t.Fatalf("expected role membership failure condition, got %#v", observed.Status.Conditions)
 	}
 }
 
@@ -424,7 +714,7 @@ func TestKubernetesAuthReconcilerAttachesAuthWithSecretBackedCredentials(t *test
 	}
 	identity := &infisicalv1alpha1.InfisicalIdentity{
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
-		Status:     infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: "identity-1", ProjectID: testProjectID},
+		Status:     infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},
 	}
 	auth := &infisicalv1alpha1.InfisicalKubernetesAuth{
 		ObjectMeta: metav1.ObjectMeta{Name: "workload-auth", Namespace: testNamespace},

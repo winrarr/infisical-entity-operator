@@ -221,13 +221,16 @@ kind-load-image: ## Load IMG into the isolated Kind cluster.
 	"$(KIND)" load docker-image "$(IMG)" --name "$(KIND_CLUSTER)"
 
 .PHONY: kind-refresh
-kind-refresh: docker-build kind-load-image deploy ## Build, load, and restart the operator in Kind.
-	"$(KUBECTL)" -n "$(OPERATOR_NAMESPACE)" rollout restart deployment --selector=app.kubernetes.io/instance=$(PROJECT_NAME)
-	"$(KUBECTL)" -n "$(OPERATOR_NAMESPACE)" rollout status deployment --selector=app.kubernetes.io/instance=$(PROJECT_NAME) --timeout=5m
+kind-refresh: docker-build kind-load-image deploy kind-restart ## Build, load, and restart the operator in Kind.
 
 .PHONY: kind-e2e
-kind-e2e: kind-deploy ## Run the live Infisical reconciliation and network-policy test.
+kind-e2e: kind-deploy kind-restart ## Run the live Infisical reconciliation and network-policy test.
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" ./hack/e2e-kind.sh
+
+.PHONY: kind-restart
+kind-restart: ## Restart the operator after loading a mutable local image tag.
+	"$(KUBECTL)" -n "$(OPERATOR_NAMESPACE)" rollout restart deployment -l app.kubernetes.io/instance="$(PROJECT_NAME)"
+	"$(KUBECTL)" -n "$(OPERATOR_NAMESPACE)" rollout status deployment -l app.kubernetes.io/instance="$(PROJECT_NAME)" --timeout=5m
 
 .PHONY: kind-down
 kind-down: ## Delete only the isolated Kind cluster.

@@ -18,7 +18,7 @@ The command:
 - builds and loads the operator image;
 - installs the CRDs and operator chart;
 - applies `config/network-policy/allow-infisical-egress.yaml`;
-- creates connection, project, identity, and environment resources and waits for them to become `Ready=True`;
+- creates connection, project, identity with permanent role membership, and environment resources and waits for them to become `Ready=True`;
 - creates project-role and Kubernetes Auth resources and verifies their external error handling when the local Infisical plan rejects custom roles or cluster-local Kubernetes review URLs;
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
 

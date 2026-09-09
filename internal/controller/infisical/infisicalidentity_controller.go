@@ -18,6 +18,7 @@ package infisical
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,6 +42,7 @@ type InfisicalIdentityReconciler struct {
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalidentities/finalizers,verbs=update
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalconnections,verbs=get;list;watch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojects,verbs=get;list;watch
+// +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojectroles,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *InfisicalIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -112,6 +114,8 @@ func (r *InfisicalIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if infisicalclient.IsNotFound(err) {
 			before := identity.Status
 			identity.Status.IdentityID = ""
+			identity.Status.MembershipID = ""
+			identity.Status.Roles = nil
 			identity.Status.ObservedGeneration = identity.Generation
 			setCondition(&identity.Status.Conditions, identity.Generation, "False", "RemoteIdentityMissing", "the identity no longer exists in Infisical; it will be recreated according to creationPolicy")
 			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &identity, before, identity.Status)
@@ -133,6 +137,13 @@ func (r *InfisicalIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	r.setIdentityObservedState(&identity, current, project.Status.ProjectID)
+	roleSlugs, err := identityRoleSlugs(identity.Spec.RoleSlugs)
+	if err != nil {
+		return r.identityError(ctx, &identity, "RoleConfigurationInvalid", err)
+	}
+	if err := r.reconcileIdentityMembership(ctx, apiClient, &identity, project.Status.ProjectID, roleSlugs); err != nil {
+		return r.identityError(ctx, &identity, "RoleMembershipReconcileFailed", err)
+	}
 	setCondition(&identity.Status.Conditions, identity.Generation, "True", "Ready", "Infisical identity is reconciled")
 	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &identity, before, identity.Status)
 }
@@ -158,6 +169,42 @@ func (r *InfisicalIdentityReconciler) setIdentityObservedState(identity *infisic
 	identity.Status.IdentityID = observed.ID
 	identity.Status.ProjectID = projectID
 	identity.Status.ObservedGeneration = identity.Generation
+}
+
+func (r *InfisicalIdentityReconciler) reconcileIdentityMembership(ctx context.Context, apiClient *infisicalclient.Client, identity *infisicalv1alpha1.InfisicalIdentity, projectID string, roleSlugs []string) error {
+	if len(roleSlugs) == 0 {
+		identity.Status.MembershipID = ""
+		identity.Status.Roles = nil
+		return nil
+	}
+
+	membership, err := apiClient.GetIdentityMembership(ctx, projectID, identity.Status.IdentityID)
+	if err != nil {
+		if !infisicalclient.IsNotFound(err) {
+			return fmt.Errorf("read identity project membership: %w", err)
+		}
+		if _, err := apiClient.CreateIdentityMembership(ctx, projectID, identity.Status.IdentityID, roleSlugs); err != nil {
+			return fmt.Errorf("create identity project membership: %w", err)
+		}
+		membership, err = apiClient.GetIdentityMembership(ctx, projectID, identity.Status.IdentityID)
+		if err != nil {
+			return fmt.Errorf("read created identity project membership: %w", err)
+		}
+	}
+
+	if !identityRoleSlugsEqual(roleSlugs, membership.Roles) {
+		if _, err := apiClient.UpdateIdentityMembership(ctx, projectID, identity.Status.IdentityID, roleSlugs); err != nil {
+			return fmt.Errorf("update identity project membership: %w", err)
+		}
+		membership, err = apiClient.GetIdentityMembership(ctx, projectID, identity.Status.IdentityID)
+		if err != nil {
+			return fmt.Errorf("read updated identity project membership: %w", err)
+		}
+	}
+
+	identity.Status.MembershipID = membership.ID
+	identity.Status.Roles = identityRoleStatusesFrom(membership.Roles)
+	return nil
 }
 
 func (r *InfisicalIdentityReconciler) identityError(ctx context.Context, identity *infisicalv1alpha1.InfisicalIdentity, reason string, err error) (ctrl.Result, error) {
@@ -210,6 +257,25 @@ func (r *InfisicalIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if identity.Spec.ProjectRef.Name == object.GetName() {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
 				}
+			}
+			return requests
+		})).
+		Watches(&infisicalv1alpha1.InfisicalProjectRole{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
+			role, ok := object.(*infisicalv1alpha1.InfisicalProjectRole)
+			if !ok {
+				return nil
+			}
+			var identities infisicalv1alpha1.InfisicalIdentityList
+			if err := mgr.GetClient().List(ctx, &identities, client.InNamespace(object.GetNamespace())); err != nil {
+				return nil
+			}
+			requests := make([]ctrl.Request, 0)
+			for i := range identities.Items {
+				identity := &identities.Items[i]
+				if identity.Spec.ProjectRef.Name != role.Spec.ProjectRef.Name || !containsString(identity.Spec.RoleSlugs, projectRoleSlug(role)) {
+					continue
+				}
+				requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
 			}
 			return requests
 		})).
