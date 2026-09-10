@@ -12,4 +12,4 @@ kubectl -n NAMESPACE describe infisicalproject NAME
 
 Managed resources record only non-secret observed state: identifiers, names, slugs, policy configuration, and whether optional credentials are present. Tokens, CA material, and token-review JWTs are never written to status.
 
-The six CRDs are compatible with generic kstatus consumers through their `Ready` condition and observed generation. They do not currently emit kstatus’s conventional `Reconciling` and `Stalled` conditions, so consumers should use the condition reason and message for detailed failure classification. See the [verification guide](../../development/project/verification.md) for the evidence boundary.
+The six CRDs are compatible with generic kstatus consumers through their `Ready` condition and observed generation. They do not currently emit kstatus’s conventional `Reconciling` and `Stalled` conditions, so consumers should use the condition reason and message for detailed failure classification. See the [verification guide](../verification.md) for the evidence boundary.

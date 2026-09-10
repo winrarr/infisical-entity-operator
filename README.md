@@ -80,7 +80,7 @@ The complete local path is intentionally reproducible:
 make kind-e2e
 ```
 
-This creates an isolated Kind cluster with Cilium, installs the official Infisical standalone Helm chart, bootstraps a short-lived local instance-admin token, deploys the operator, applies a Cilium-aware egress policy, and verifies connection, project, identity, and environment reconciliation. It also exercises project-role and Kubernetes Auth reconciliation; the local Infisical chart may report those features as unavailable when its plan rejects custom roles or cluster-local review URLs. See [local Kind operations](docs/development/operations/local-kind.md) for cleanup and troubleshooting.
+This creates an isolated Kind cluster with Cilium, installs the official Infisical standalone Helm chart, bootstraps a short-lived local instance-admin token, deploys the operator, applies a Cilium-aware egress policy, and verifies connection, project, identity, and environment reconciliation. It also exercises project-role and Kubernetes Auth reconciliation; the local Infisical chart may report those features as unavailable when its plan rejects custom roles or cluster-local review URLs. See [local Kind operations](docs/operations/local-kind.md) for cleanup and troubleshooting.
 
 ## API and safety notes
 
@@ -89,7 +89,7 @@ This creates an isolated Kind cluster with Cilium, installs the official Infisic
 - Connection and ownership references are immutable after creation so an external object cannot silently move between endpoints or projects.
 - The operator stores external identifiers and observed state in Kubernetes status, never external bearer tokens.
 
-See the [documentation home](docs/index.md), [operator usage docs](docs/usage/index.md), [product scope](docs/development/project/product.md), [architecture](docs/development/architecture.md), [verification guide](docs/development/project/verification.md), [backlog](docs/development/project/backlog.md), [tech-debt register](docs/development/project/tech-debt.md), [research](docs/development/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/development/decisions/index.md).
+See the [documentation map](docs/index.md), [product scope](docs/product.md), [architecture](docs/architecture.md), [verification guide](docs/verification.md), [backlog](docs/backlog.md), [tech-debt register](docs/tech-debt.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
 
 The [published documentation site](https://winrarr.github.io/infisical-entity-operator/) provides the navigable reference and quickstart.
 

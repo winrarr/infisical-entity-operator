@@ -10,12 +10,12 @@ The operator is a control-plane integration. It does not synchronize Infisical s
 
 ## Kubernetes permissions
 
-The default chart uses a cluster-wide manager because the operator watches namespaced custom resources across the cluster. Its ClusterRole can read Secrets and manage these CRDs in all namespaces. This is a deliberate single-controller deployment choice, not a multi-tenant isolation claim. Multi-tenancy remains an explicit evaluation item in the [backlog](../../development/project/backlog.md).
+The default chart uses a cluster-wide manager because the operator watches namespaced custom resources across the cluster. Its ClusterRole can read Secrets and manage these CRDs in all namespaces. This is a deliberate single-controller deployment choice, not a multi-tenant isolation claim. Multi-tenancy remains an explicit evaluation item in the [backlog](../backlog.md).
 
 Run namespace-scoped deployments and narrower RBAC only after completing that evaluation. Do not introduce cross-namespace references or shared bearer-token Secrets as a shortcut.
 
 ## Network and runtime posture
 
-The chart runs the manager as non-root with a read-only root filesystem, no privilege escalation, and all capabilities dropped. Network egress should be limited to the configured Infisical API and required Kubernetes API access. The [local Kind workflow](../../development/operations/local-kind.md) demonstrates this with Cilium.
+The chart runs the manager as non-root with a read-only root filesystem, no privilege escalation, and all capabilities dropped. Network egress should be limited to the configured Infisical API and required Kubernetes API access. The [local Kind workflow](../operations/local-kind.md) demonstrates this with Cilium.
 
 Avoid placing tokens in manifests committed to Git, controller logs, events, status, generated documentation, or support bundles.

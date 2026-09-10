@@ -21,4 +21,4 @@ The exact Deployment name changes when the Helm release or chart name is overrid
 | API calls time out | Check DNS, TLS, the configured `hostAPI`, proxy settings, and egress NetworkPolicies. |
 | Delete is waiting | Inspect delete protection, child resources, the finalizer, and the `Ready` reason. `Orphan` avoids remote deletion when that is the desired outcome. |
 
-For a reproducible end-to-end environment, use the [local Kind operations](../../development/operations/local-kind.md) guide. The [verification guide](../../development/project/verification.md) describes which local tests require a live Infisical plan or endpoint capability.
+For a reproducible end-to-end environment, use the [local Kind operations](../operations/local-kind.md) guide. The [verification guide](../verification.md) describes which local tests require a live Infisical plan or endpoint capability.

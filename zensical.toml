@@ -11,60 +11,55 @@ repo_name = "winrarr/infisical-entity-operator"
 edit_uri = "edit/main/docs/"
 strict = true
 nav = [
-  { "Home" = "index.md" },
-  { "Using the Operator" = [
-    "usage/index.md",
-    { "Quickstart" = "usage/quickstart.md" },
-    { "Installation" = "usage/installation.md" },
-    { "Concepts" = "usage/concepts.md" },
-    { "Guides" = [
-      { "Lifecycle and Ownership" = "usage/reference/deletion-and-ownership.md" },
-      { "Security" = "usage/reference/security.md" },
-      { "Troubleshooting" = "usage/reference/troubleshooting.md" },
-      { "Examples" = [
-        "usage/examples/index.md",
-        { "Project and Identity" = "usage/examples/project-and-identity.md" },
-      ] },
-    ] },
-    { "Reference" = [
-      "usage/reference/index.md",
-      { "Resources" = "usage/reference/resources.md" },
-      { "Status and Conditions" = "usage/reference/status-and-conditions.md" },
-      { "Custom Resources" = [
-        "usage/crds/index.md",
-        { "InfisicalConnection" = "usage/crds/infisical-connection.md" },
-        { "InfisicalProject" = "usage/crds/infisical-project.md" },
-        { "InfisicalEnvironment" = "usage/crds/infisical-environment.md" },
-        { "InfisicalProjectRole" = "usage/crds/infisical-project-role.md" },
-        { "InfisicalIdentity" = "usage/crds/infisical-identity.md" },
-        { "InfisicalKubernetesAuth" = "usage/crds/infisical-kubernetes-auth.md" },
-      ] },
-      { "Generated API Reference" = "usage/reference/api.md" },
-    ] },
+  { "Introduction" = [
+    "index.md",
+    { "Quickstart" = "quickstart.md" },
+    { "Installation" = "introduction/installation.md" },
+    { "Concepts" = "introduction/concepts.md" },
   ] },
-  { "Developing the Project" = [
-    "development/index.md",
-    { "Architecture" = [
-      "development/architecture/index.md",
-      { "Technical Architecture" = "development/architecture.md" },
-      { "Decisions" = "development/decisions/index.md" },
+  { "Guides" = [
+    "guides/index.md",
+    { "Lifecycle and Ownership" = "reference/deletion-and-ownership.md" },
+    { "Security" = "reference/security.md" },
+    { "Troubleshooting" = "reference/troubleshooting.md" },
+    { "Examples" = "examples/index.md" },
+  ] },
+  { "Reference" = [
+    "reference/index.md",
+    { "Resources" = "reference/resources.md" },
+    { "Status and Conditions" = "reference/status-and-conditions.md" },
+    { "Custom Resources" = [
+      "crds/index.md",
+      { "InfisicalConnection" = "crds/infisical-connection.md" },
+      { "InfisicalProject" = "crds/infisical-project.md" },
+      { "InfisicalEnvironment" = "crds/infisical-environment.md" },
+      { "InfisicalProjectRole" = "crds/infisical-project-role.md" },
+      { "InfisicalIdentity" = "crds/infisical-identity.md" },
+      { "InfisicalKubernetesAuth" = "crds/infisical-kubernetes-auth.md" },
     ] },
-    { "Contributing" = [
-      { "Local Development" = "development/contributing/local-development.md" },
-      { "Documentation" = "development/contributing/documentation.md" },
-    ] },
-    { "Operations" = [
-      "development/operations/index.md",
-      { "Local Kind" = "development/operations/local-kind.md" },
-    ] },
-    { "Project" = [
-      "development/project/index.md",
-      { "Product Scope" = "development/project/product.md" },
-      { "Backlog" = "development/project/backlog.md" },
-      { "Tech Debt" = "development/project/tech-debt.md" },
-      { "Verification" = "development/project/verification.md" },
-    ] },
-    { "Research" = "development/research/2026-09-09-infisical-api-and-versions.md" },
+    { "Generated API Reference" = "reference/api.md" },
+  ] },
+  { "Architecture" = [
+    "architecture/index.md",
+    { "Technical Architecture" = "architecture.md" },
+    { "Decisions" = "decisions/index.md" },
+  ] },
+  { "Operations" = [
+    "operations/index.md",
+    { "Local Kind" = "operations/local-kind.md" },
+  ] },
+  { "Project" = [
+    "project/index.md",
+    { "Product Scope" = "product.md" },
+    { "Backlog" = "backlog.md" },
+    { "Tech Debt" = "tech-debt.md" },
+    { "Verification" = "verification.md" },
+    { "Research" = "research/2026-09-09-infisical-api-and-versions.md" },
+  ] },
+  { "Development" = [
+    "contributing/index.md",
+    { "Local Development" = "contributing/local-development.md" },
+    { "Documentation" = "contributing/documentation.md" },
   ] },
 ]
 

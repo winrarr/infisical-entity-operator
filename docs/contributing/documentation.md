@@ -1,6 +1,6 @@
 # Documentation development
 
-Markdown under `docs/` is the source of truth for the published site. `zensical.toml` defines navigation, repository links, and strict validation. The generated CRD reference at `docs/usage/reference/api.md` comes from the Go API definitions and `hack/crd-ref-docs.yaml`; edit the API comments and regenerate it instead of editing the generated file.
+Markdown under `docs/` is the source of truth for the published site. `zensical.toml` defines navigation, repository links, and strict validation. The generated CRD reference at `docs/reference/api.md` comes from the Go API definitions and `hack/crd-ref-docs.yaml`; edit the API comments and regenerate it instead of editing the generated file.
 
 Build the site locally with the pinned container image:
 

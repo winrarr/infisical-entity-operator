@@ -24,4 +24,4 @@ Each reconciler follows the same broad lifecycle:
 
 The operator manages identity project-role membership only when `spec.roleSlugs` is present. Omitting the field leaves an existing membership unmanaged. Set `roleSlugs: [no-access]` when an identity should explicitly have no project permissions.
 
-The [resource reference](reference/resources.md), [status conventions](reference/status-and-conditions.md), and [generated API reference](reference/api.md) describe the exact contract.
+The [resource reference](../reference/resources.md), [status conventions](../reference/status-and-conditions.md), and [generated API reference](../reference/api.md) describe the exact contract.
