@@ -20,16 +20,45 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalIdentity"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.projectRef) || self.projectRef == oldSelf.projectRef",message="projectRef is immutable; delete and recreate the InfisicalIdentity"
+// IdentityScope selects the Infisical ownership boundary for a machine identity.
+// Project is the backward-compatible default.
+// +kubebuilder:validation:Enum=Project;Organization
+type IdentityScope string
 
+const (
+	// IdentityScopeProject creates a project-managed machine identity.
+	IdentityScopeProject IdentityScope = "Project"
+	// IdentityScopeOrganization creates an organization-managed machine identity.
+	IdentityScopeOrganization IdentityScope = "Organization"
+)
+
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalIdentity"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.scope) || self.scope == oldSelf.scope",message="scope is immutable; delete and recreate the InfisicalIdentity"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.projectRef) || self.projectRef == oldSelf.projectRef",message="projectRef is immutable; delete and recreate the InfisicalIdentity"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef",message="organizationRef is immutable; delete and recreate the InfisicalIdentity"
+// +kubebuilder:validation:XValidation:rule="self.scope == 'Organization' ? has(self.organizationRef) && (!has(self.projectRef) || size(self.projectRef.name) == 0) : has(self.projectRef) && size(self.projectRef.name) > 0 && !has(self.organizationRef)",message="Project scope requires projectRef and Organization scope requires organizationRef"
+// +kubebuilder:validation:XValidation:rule="self.scope == 'Organization' ? (!has(self.roleSlugs) || size(self.roleSlugs) == 0) : (!has(self.projectRoleBindings) || size(self.projectRoleBindings) == 0)",message="roleSlugs is only valid for Project scope and projectRoleBindings is only valid for Organization scope"
+// +kubebuilder:validation:XValidation:rule="self.scope == 'Organization' || !has(self.organizationRole)",message="organizationRole is only valid for Organization scope"
 // InfisicalIdentitySpec defines the desired state of InfisicalIdentity
 type InfisicalIdentitySpec struct {
 	// ConnectionRef selects the Infisical API connection.
 	ConnectionRef InfisicalConnectionReference `json:"connectionRef"`
 
-	// ProjectRef references the InfisicalProject resource that owns this identity.
-	ProjectRef LocalObjectReference `json:"projectRef"`
+	// Scope selects whether Infisical manages this identity at project or organization scope.
+	// It defaults to Project. Organization-scoped identities are useful as tenant principals:
+	// assign their project access through projectRoleBindings.
+	// +optional
+	// +kubebuilder:default=Project
+	Scope IdentityScope `json:"scope,omitempty"`
+
+	// ProjectRef references the InfisicalProject resource that owns a project-scoped identity.
+	// +optional
+	ProjectRef *LocalObjectReference `json:"projectRef,omitempty"`
+
+	// OrganizationRef references an InfisicalProject resource whose observed organization owns
+	// an organization-scoped identity. The project itself need not be listed in projectRoleBindings.
+	// +optional
+	OrganizationRef *LocalObjectReference `json:"organizationRef,omitempty"`
 
 	// IdentityName is the Infisical identity name. If omitted, metadata.name is used.
 	// +optional
@@ -55,6 +84,20 @@ type InfisicalIdentitySpec struct {
 	// +kubebuilder:validation:MinItems=1
 	RoleSlugs []string `json:"roleSlugs,omitempty"`
 
+	// OrganizationRole is the Infisical organization role for an organization-scoped identity.
+	// Leave it empty to use Infisical's least-privilege no-access role. Project-scoped identities
+	// must omit this field.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	OrganizationRole string `json:"organizationRole,omitempty"`
+
+	// ProjectRoleBindings grants an organization-scoped identity roles in selected projects.
+	// A binding manages that project's complete permanent role list; omitted projects are left
+	// unmanaged. Every referenced project must belong to the organization from organizationRef.
+	// +optional
+	// +listType=atomic
+	ProjectRoleBindings []IdentityProjectRoleBinding `json:"projectRoleBindings,omitempty"`
+
 	// CreationPolicy controls whether the operator creates or adopts an identity.
 	// +optional
 	// +kubebuilder:default=Create
@@ -76,6 +119,12 @@ type InfisicalIdentityStatus struct {
 	// ProjectID is the observed owning project identifier.
 	ProjectID string `json:"projectID,omitempty"`
 
+	// OrganizationID is the observed owning organization identifier for an organization-scoped identity.
+	OrganizationID string `json:"organizationID,omitempty"`
+
+	// OrganizationRole is the observed organization role for an organization-scoped identity.
+	OrganizationRole string `json:"organizationRole,omitempty"`
+
 	// MembershipID is the Infisical project membership identifier when role management is enabled.
 	MembershipID string `json:"membershipID,omitempty"`
 
@@ -83,6 +132,11 @@ type InfisicalIdentityStatus struct {
 	// +optional
 	// +listType=atomic
 	Roles []IdentityRoleStatus `json:"roles,omitempty"`
+
+	// ProjectMemberships contains observed memberships managed through projectRoleBindings.
+	// +optional
+	// +listType=atomic
+	ProjectMemberships []IdentityProjectMembershipStatus `json:"projectMemberships,omitempty"`
 
 	// ObservedGeneration is the most recent generation reflected in status.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -92,6 +146,30 @@ type InfisicalIdentityStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// IdentityProjectRoleBinding declares the permanent project roles for an organization-scoped identity.
+type IdentityProjectRoleBinding struct {
+	// ProjectRef references the project receiving this identity's roles.
+	ProjectRef LocalObjectReference `json:"projectRef"`
+
+	// RoleSlugs is the complete permanent role set for this project membership.
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	RoleSlugs []string `json:"roleSlugs"`
+}
+
+// IdentityProjectMembershipStatus describes an observed project membership for an organization-scoped identity.
+type IdentityProjectMembershipStatus struct {
+	// ProjectID is the Infisical project identifier.
+	ProjectID string `json:"projectID,omitempty"`
+
+	// MembershipID is the Infisical project membership identifier.
+	MembershipID string `json:"membershipID,omitempty"`
+
+	// Roles contains the observed permanent or temporary roles.
+	// +listType=atomic
+	Roles []IdentityRoleStatus `json:"roles,omitempty"`
 }
 
 // IdentityRoleStatus describes an observed permanent or temporary project role.

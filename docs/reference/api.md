@@ -80,6 +80,42 @@ _Appears in:_
 | `value` _string_ | Value is the metadata value. |  |  |
 
 
+#### IdentityProjectRoleBinding
+
+
+
+IdentityProjectRoleBinding declares the permanent project roles for an organization-scoped identity.
+
+
+
+_Appears in:_
+- [InfisicalIdentitySpec](#infisicalidentityspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `projectRef` _[LocalObjectReference](#localobjectreference)_ | ProjectRef references the project receiving this identity's roles. |  |  |
+| `roleSlugs` _string array_ | RoleSlugs is the complete permanent role set for this project membership. |  | MinItems: 1 <br /> |
+
+
+#### IdentityScope
+
+_Underlying type:_ _string_
+
+IdentityScope selects the Infisical ownership boundary for a machine identity.
+Project is the backward-compatible default.
+
+_Validation:_
+- Enum: [Project Organization]
+
+_Appears in:_
+- [InfisicalIdentitySpec](#infisicalidentityspec)
+
+| Field | Description |
+| --- | --- |
+| `Project` | IdentityScopeProject creates a project-managed machine identity.<br /> |
+| `Organization` | IdentityScopeOrganization creates an organization-managed machine identity.<br /> |
+
+
 #### InfisicalConnection
 
 
@@ -208,11 +244,15 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection. |  |  |
-| `projectRef` _[LocalObjectReference](#localobjectreference)_ | ProjectRef references the InfisicalProject resource that owns this identity. |  |  |
+| `scope` _[IdentityScope](#identityscope)_ | Scope selects whether Infisical manages this identity at project or organization scope.<br />It defaults to Project. Organization-scoped identities are useful as tenant principals:<br />assign their project access through projectRoleBindings. | Project | Enum: [Project Organization] <br />Optional: \{\} <br /> |
+| `projectRef` _[LocalObjectReference](#localobjectreference)_ | ProjectRef references the InfisicalProject resource that owns a project-scoped identity. |  | Optional: \{\} <br /> |
+| `organizationRef` _[LocalObjectReference](#localobjectreference)_ | OrganizationRef references an InfisicalProject resource whose observed organization owns<br />an organization-scoped identity. The project itself need not be listed in projectRoleBindings. |  | Optional: \{\} <br /> |
 | `identityName` _string_ | IdentityName is the Infisical identity name. If omitted, metadata.name is used. |  | MinLength: 1 <br />Optional: \{\} <br /> |
 | `hasDeleteProtection` _boolean_ | HasDeleteProtection configures Infisical-side delete protection. | false | Optional: \{\} <br /> |
 | `metadata` _[IdentityMetadata](#identitymetadata) array_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `roleSlugs` _string array_ | RoleSlugs declares the permanent project role slugs assigned to the identity.<br />When omitted, the existing project membership is not managed. Use no-access<br />explicitly when the identity should have no project permissions. |  | MinItems: 1 <br />Optional: \{\} <br /> |
+| `organizationRole` _string_ | OrganizationRole is the Infisical organization role for an organization-scoped identity.<br />Leave it empty to use Infisical's least-privilege no-access role. Project-scoped identities<br />must omit this field. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `projectRoleBindings` _[IdentityProjectRoleBinding](#identityprojectrolebinding) array_ | ProjectRoleBindings grants an organization-scoped identity roles in selected projects.<br />A binding manages that project's complete permanent role list; omitted projects are left<br />unmanaged. Every referenced project must belong to the organization from organizationRef. |  | Optional: \{\} <br /> |
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the operator creates or adopts an identity. | Create | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | DeletionPolicy controls whether the external identity is deleted with this resource. | Orphan | Enum: [Delete Orphan] <br />Optional: \{\} <br /> |
 
@@ -394,6 +434,7 @@ LocalObjectReference identifies a same-namespace custom resource.
 
 
 _Appears in:_
+- [IdentityProjectRoleBinding](#identityprojectrolebinding)
 - [InfisicalEnvironmentSpec](#infisicalenvironmentspec)
 - [InfisicalIdentitySpec](#infisicalidentityspec)
 - [InfisicalKubernetesAuthSpec](#infisicalkubernetesauthspec)

@@ -18,10 +18,17 @@ package infisicalclient
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+)
+
+const (
+	testOrganizationID           = "org-1"
+	testOrganizationMemberRole   = "member"
+	testOrganizationIdentityPath = "/api/v1/identities/identity-1"
 )
 
 func TestClientUsesAPIPathAndBearerToken(t *testing.T) {
@@ -70,5 +77,80 @@ func TestNewRejectsInvalidURLAndEmptyToken(t *testing.T) {
 	}
 	if _, err := New("https://app.infisical.com/api", "", time.Second); err == nil {
 		t.Fatal("expected empty token error")
+	}
+}
+
+func TestOrganizationIdentityClientUsesOrganizationEndpoints(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/identities":
+			requests++
+			var body CreateOrganizationIdentityRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode organization identity request: %v", err)
+			}
+			if body.OrganizationID != testOrganizationID || body.Role != testOrganizationMemberRole {
+				t.Errorf("unexpected organization identity request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"tenant","orgId":"org-1","role":"member"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/identities":
+			requests++
+			if request.URL.Query().Get("orgId") != testOrganizationID {
+				t.Errorf("unexpected organization query: %s", request.URL.RawQuery)
+			}
+			_, _ = writer.Write([]byte(`{"identities":[{"id":"membership-1","identityId":"identity-1","role":"no-access","orgId":"org-1","identity":{"id":"identity-1","name":"tenant","orgId":"org-1","hasDeleteProtection":false}}]}`))
+		case request.Method == http.MethodGet && request.URL.Path == testOrganizationIdentityPath:
+			requests++
+			_, _ = writer.Write([]byte(`{"identity":{"id":"membership-1","identityId":"identity-1","orgId":"org-1","role":"no-access","identity":{"id":"identity-1","name":"tenant","orgId":"org-1","hasDeleteProtection":false}}}`))
+		case request.Method == http.MethodPatch && request.URL.Path == testOrganizationIdentityPath:
+			requests++
+			_, _ = writer.Write([]byte(`{"identity":{"id":"membership-1","identityId":"identity-1","orgId":"org-1","role":"member","identity":{"id":"identity-1","name":"tenant-renamed","orgId":"org-1","hasDeleteProtection":false}}}`))
+		case request.Method == http.MethodDelete && request.URL.Path == testOrganizationIdentityPath:
+			requests++
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	created, err := client.CreateOrganizationIdentity(context.Background(), testOrganizationID, CreateOrganizationIdentityRequest{Name: "tenant", Role: testOrganizationMemberRole})
+	if err != nil {
+		t.Fatalf("create organization identity: %v", err)
+	}
+	if created.OrganizationID != testOrganizationID || created.OrganizationRole != testOrganizationMemberRole {
+		t.Fatalf("unexpected created identity: %#v", created)
+	}
+	found, err := client.FindOrganizationIdentity(context.Background(), testOrganizationID, "tenant")
+	if err != nil {
+		t.Fatalf("find organization identity: %v", err)
+	}
+	if found == nil || found.ID != "identity-1" || found.OrganizationRole != "no-access" {
+		t.Fatalf("unexpected found identity: %#v", found)
+	}
+	observed, err := client.GetOrganizationIdentity(context.Background(), "identity-1")
+	if err != nil {
+		t.Fatalf("get organization identity: %v", err)
+	}
+	if observed.OrganizationID != testOrganizationID {
+		t.Fatalf("unexpected observed identity: %#v", observed)
+	}
+	updated, err := client.UpdateOrganizationIdentity(context.Background(), "identity-1", IdentityPatch{Name: "tenant-renamed"})
+	if err != nil {
+		t.Fatalf("update organization identity: %v", err)
+	}
+	if updated.Name != "tenant-renamed" {
+		t.Fatalf("unexpected updated identity: %#v", updated)
+	}
+	if err := client.DeleteOrganizationIdentity(context.Background(), "identity-1"); err != nil {
+		t.Fatalf("delete organization identity: %v", err)
+	}
+	if requests != 5 {
+		t.Fatalf("expected five organization identity requests, got %d", requests)
 	}
 }

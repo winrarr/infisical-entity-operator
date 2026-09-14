@@ -18,7 +18,9 @@ cleanup() {
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalkubernetesauth/e2e-kubernetes-auth --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalprojectrole/e2e-project-role --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalenvironment/e2e-environment --ignore-not-found --wait=true >/dev/null 2>&1 || true
+    "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalidentity/e2e-tenant-identity --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalidentity/e2e-identity --ignore-not-found --wait=true >/dev/null 2>&1 || true
+    "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalproject/e2e-tenant-secondary --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalproject/e2e-project --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalconnection/infisical --ignore-not-found --wait=true >/dev/null 2>&1 || true
   fi
@@ -135,6 +137,44 @@ spec:
   deletionPolicy: Delete
 ---
 apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalProject
+metadata:
+  name: e2e-tenant-secondary
+spec:
+  connectionRef:
+    name: infisical
+  projectName: e2e-tenant-secondary
+  slug: e2e-tenant-secondary
+  description: Second project for organization identity membership testing
+  creationPolicy: Create
+  deletionPolicy: Delete
+---
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalIdentity
+metadata:
+  name: e2e-tenant-identity
+spec:
+  connectionRef:
+    name: infisical
+  scope: Organization
+  organizationRef:
+    name: e2e-project
+  projectRoleBindings:
+    - projectRef:
+        name: e2e-project
+      roleSlugs:
+        - no-access
+    - projectRef:
+        name: e2e-tenant-secondary
+      roleSlugs:
+        - member
+  metadata:
+    - key: test
+      value: kind-organization-identity
+  creationPolicy: Create
+  deletionPolicy: Delete
+---
+apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalEnvironment
 metadata:
   name: e2e-environment
@@ -156,7 +196,11 @@ EOF
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalproject/e2e-project --timeout=5m
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
+  infisicalproject/e2e-tenant-secondary --timeout=5m
+"${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalidentity/e2e-identity --timeout=5m
+"${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
+  infisicalidentity/e2e-tenant-identity --timeout=5m
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalenvironment/e2e-environment --timeout=5m
 
@@ -233,12 +277,20 @@ project_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalproject e2e-project
 identity_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-identity -o jsonpath='{.status.identityID}')"
 membership_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-identity -o jsonpath='{.status.membershipID}')"
 identity_role_slug="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-identity -o jsonpath='{.status.roles[0].slug}')"
+tenant_identity_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.identityID}')"
+tenant_organization_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.organizationID}')"
+tenant_organization_role="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.organizationRole}')"
+tenant_membership_one="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.projectMemberships[0].membershipID}')"
+tenant_membership_two="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.projectMemberships[1].membershipID}')"
+tenant_role_one="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.projectMemberships[0].roles[0].slug}')"
+tenant_role_two="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalidentity e2e-tenant-identity -o jsonpath='{.status.projectMemberships[1].roles[0].slug}')"
 environment_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalenvironment e2e-environment -o jsonpath='{.status.environmentID}')"
 role_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalprojectrole e2e-project-role -o jsonpath='{.status.roleID}')"
 auth_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalkubernetesauth e2e-kubernetes-auth -o jsonpath='{.status.authID}')"
-if [[ -z "${project_id}" || -z "${identity_id}" || -z "${membership_id}" || "${identity_role_slug}" != "no-access" || -z "${environment_id}" ]]; then
+if [[ -z "${project_id}" || -z "${identity_id}" || -z "${membership_id}" || "${identity_role_slug}" != "no-access" || -z "${tenant_identity_id}" || -z "${tenant_organization_id}" || "${tenant_organization_role}" != "no-access" || -z "${tenant_membership_one}" || -z "${tenant_membership_two}" || "${tenant_role_one}" != "no-access" || "${tenant_role_two}" != "member" || -z "${environment_id}" ]]; then
   echo "unexpected identity membership status: projectID=${project_id} identityID=${identity_id} membershipID=${membership_id} roleSlug=${identity_role_slug} environmentID=${environment_id}" >&2
-  "${KUBECTL}" -n "${TEST_NAMESPACE}" get infisicalidentity/e2e-identity -o yaml >&2 || true
+  echo "tenant identity status: identityID=${tenant_identity_id} organizationID=${tenant_organization_id} organizationRole=${tenant_organization_role} membershipOne=${tenant_membership_one} membershipTwo=${tenant_membership_two} roleOne=${tenant_role_one} roleTwo=${tenant_role_two}" >&2
+  "${KUBECTL}" -n "${TEST_NAMESPACE}" get infisicalidentity/e2e-identity infisicalidentity/e2e-tenant-identity -o yaml >&2 || true
   exit 1
 fi
 if [[ "${project_role_available}" == true ]]; then

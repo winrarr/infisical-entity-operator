@@ -31,11 +31,14 @@ type IdentityMetadata struct {
 	Value string `json:"value"`
 }
 
-// Identity is a project-managed Infisical machine identity.
+// Identity is an Infisical machine identity. ProjectID is set for project-managed
+// identities and OrganizationID/OrganizationRole are set for organization-managed identities.
 type Identity struct {
 	ID                  string             `json:"id"`
 	Name                string             `json:"name"`
 	ProjectID           string             `json:"projectId"`
+	OrganizationID      string             `json:"orgId"`
+	OrganizationRole    string             `json:"role"`
 	HasDeleteProtection bool               `json:"hasDeleteProtection"`
 	Metadata            []IdentityMetadata `json:"metadata"`
 }
@@ -96,9 +99,19 @@ type CreateIdentityRequest struct {
 	Metadata            []IdentityMetadata `json:"metadata,omitempty"`
 }
 
+// CreateOrganizationIdentityRequest is the supported organization identity creation surface.
+type CreateOrganizationIdentityRequest struct {
+	Name                string             `json:"name"`
+	OrganizationID      string             `json:"organizationId"`
+	Role                string             `json:"role"`
+	HasDeleteProtection bool               `json:"hasDeleteProtection"`
+	Metadata            []IdentityMetadata `json:"metadata,omitempty"`
+}
+
 // IdentityPatch contains mutable identity fields.
 type IdentityPatch struct {
 	Name                string              `json:"name,omitempty"`
+	Role                *string             `json:"role,omitempty"`
 	HasDeleteProtection *bool               `json:"hasDeleteProtection,omitempty"`
 	Metadata            *[]IdentityMetadata `json:"metadata,omitempty"`
 }
@@ -187,6 +200,152 @@ func (c *Client) UpdateIdentity(ctx context.Context, projectID, identityID strin
 func (c *Client) DeleteIdentity(ctx context.Context, projectID, identityID string) error {
 	path := "/v1/projects/" + url.PathEscape(projectID) + "/identities/" + url.PathEscape(identityID)
 	return c.do(ctx, http.MethodDelete, path, nil, nil, nil)
+}
+
+// CreateOrganizationIdentity creates an identity at organization scope.
+func (c *Client) CreateOrganizationIdentity(ctx context.Context, organizationID string, request CreateOrganizationIdentityRequest) (*Identity, error) {
+	request.OrganizationID = organizationID
+	var response struct {
+		Identity organizationIdentityListItem `json:"identity"`
+	}
+	path := "/v1/identities"
+	if err := c.do(ctx, http.MethodPost, path, nil, request, &response); err != nil {
+		return nil, err
+	}
+	identity := response.Identity.asIdentity()
+	if err := validateIdentity(&identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
+// GetOrganizationIdentity retrieves an organization-managed identity by ID.
+func (c *Client) GetOrganizationIdentity(ctx context.Context, identityID string) (*Identity, error) {
+	var response struct {
+		Identity organizationIdentityListItem `json:"identity"`
+	}
+	path := "/v1/identities/" + url.PathEscape(identityID)
+	if err := c.do(ctx, http.MethodGet, path, nil, nil, &response); err != nil {
+		return nil, err
+	}
+	identity := response.Identity.asIdentity()
+	if err := validateIdentity(&identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
+// ListOrganizationIdentities lists organization-managed identities in an organization.
+func (c *Client) ListOrganizationIdentities(ctx context.Context, organizationID string) ([]Identity, error) {
+	var response struct {
+		Identities []organizationIdentityListItem `json:"identities"`
+	}
+	query := url.Values{
+		"orgId":  []string{organizationID},
+		"limit":  []string{strconv.Itoa(1000)},
+		"offset": []string{"0"},
+	}
+	if err := c.do(ctx, http.MethodGet, "/v1/identities", query, nil, &response); err != nil {
+		return nil, err
+	}
+	identities := make([]Identity, 0, len(response.Identities))
+	for _, item := range response.Identities {
+		identity := item.asIdentity()
+		if err := validateIdentity(&identity); err != nil {
+			return nil, err
+		}
+		identities = append(identities, identity)
+	}
+	return identities, nil
+}
+
+// FindOrganizationIdentity matches an existing organization identity by name.
+func (c *Client) FindOrganizationIdentity(ctx context.Context, organizationID, name string) (*Identity, error) {
+	identities, err := c.ListOrganizationIdentities(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range identities {
+		if identities[i].Name == name {
+			return &identities[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// UpdateOrganizationIdentity updates mutable organization identity fields.
+func (c *Client) UpdateOrganizationIdentity(ctx context.Context, identityID string, patch IdentityPatch) (*Identity, error) {
+	var response struct {
+		Identity organizationIdentityListItem `json:"identity"`
+	}
+	path := "/v1/identities/" + url.PathEscape(identityID)
+	if err := c.do(ctx, http.MethodPatch, path, nil, patch, &response); err != nil {
+		return nil, err
+	}
+	identity := response.Identity.asIdentity()
+	if err := validateIdentity(&identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
+// DeleteOrganizationIdentity deletes an organization-managed identity.
+func (c *Client) DeleteOrganizationIdentity(ctx context.Context, identityID string) error {
+	path := "/v1/identities/" + url.PathEscape(identityID)
+	return c.do(ctx, http.MethodDelete, path, nil, nil, nil)
+}
+
+type organizationIdentityListItem struct {
+	ID                  string                      `json:"id"`
+	IdentityID          string                      `json:"identityId"`
+	Name                string                      `json:"name"`
+	OrganizationID      string                      `json:"orgId"`
+	Role                string                      `json:"role"`
+	HasDeleteProtection bool                        `json:"hasDeleteProtection"`
+	Metadata            []IdentityMetadata          `json:"metadata"`
+	Identity            organizationIdentityDetails `json:"identity"`
+}
+
+type organizationIdentityDetails struct {
+	ID                  string             `json:"id"`
+	Name                string             `json:"name"`
+	OrganizationID      string             `json:"orgId"`
+	Role                string             `json:"role"`
+	HasDeleteProtection bool               `json:"hasDeleteProtection"`
+	Metadata            []IdentityMetadata `json:"metadata"`
+}
+
+func (item organizationIdentityListItem) asIdentity() Identity {
+	identity := Identity{
+		ID:                  item.Identity.ID,
+		Name:                item.Identity.Name,
+		OrganizationID:      item.Identity.OrganizationID,
+		OrganizationRole:    item.Identity.Role,
+		HasDeleteProtection: item.Identity.HasDeleteProtection,
+		Metadata:            item.Identity.Metadata,
+	}
+	if identity.ID == "" {
+		identity.ID = item.IdentityID
+	}
+	if identity.ID == "" {
+		identity.ID = item.ID
+	}
+	if identity.Name == "" {
+		identity.Name = item.Name
+	}
+	if identity.OrganizationID == "" {
+		identity.OrganizationID = item.OrganizationID
+	}
+	if identity.OrganizationRole == "" {
+		identity.OrganizationRole = item.Role
+	}
+	if !identity.HasDeleteProtection {
+		identity.HasDeleteProtection = item.HasDeleteProtection
+	}
+	if identity.Metadata == nil {
+		identity.Metadata = item.Metadata
+	}
+	return identity
 }
 
 // GetIdentityMembership retrieves an identity's project membership and roles.

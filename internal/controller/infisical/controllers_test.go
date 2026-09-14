@@ -37,18 +37,23 @@ import (
 )
 
 const (
-	testNamespace        = "default"
-	testProject          = "demo"
-	testProjectID        = "project-1"
-	testConnection       = "infisical"
-	testTokenKey         = "token"
-	testWorkload         = "workload"
-	testIdentityID       = "identity-1"
-	testIdentityPath     = "/api/v1/projects/project-1/identities"
-	testIdentityByIDPath = "/api/v1/projects/project-1/identities/identity-1"
-	testMembershipPath   = "/api/v1/projects/project-1/memberships/identities/identity-1"
-	testCustomReaderRole = "custom-reader"
-	testMemberRole       = "member"
+	testNamespace                    = "default"
+	testProject                      = "demo"
+	testProjectID                    = "project-1"
+	testConnection                   = "infisical"
+	testTokenKey                     = "token"
+	testWorkload                     = "workload"
+	testIdentityID                   = "identity-1"
+	testOrganizationID               = "org-1"
+	testSecondProjectID              = "project-2"
+	testIdentityPath                 = "/api/v1/projects/project-1/identities"
+	testIdentityByIDPath             = "/api/v1/projects/project-1/identities/identity-1"
+	testMembershipPath               = "/api/v1/projects/project-1/memberships/identities/identity-1"
+	testOrganizationIdentityPath     = "/api/v1/identities"
+	testOrganizationIdentityByIDPath = "/api/v1/identities/identity-1"
+	testSecondMembershipPath         = "/api/v1/projects/project-2/memberships/identities/identity-1"
+	testCustomReaderRole             = "custom-reader"
+	testMemberRole                   = "member"
 )
 
 type infisicalMembershipRequest struct {
@@ -79,6 +84,10 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 			&infisicalv1alpha1.InfisicalProjectRole{},
 		).
 		Build()
+}
+
+func identityProjectRef(name string) *infisicalv1alpha1.LocalObjectReference {
+	return &infisicalv1alpha1.LocalObjectReference{Name: name}
 }
 
 func connectionAndSecret(serverURL string) (*infisicalv1alpha1.InfisicalConnection, *corev1.Secret) {
@@ -235,7 +244,7 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 		},
 	}
 	kubeClient := testClient(t, connection, secret, project, identity)
@@ -261,6 +270,96 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	}
 	if len(observed.Finalizers) != 0 {
 		t.Fatalf("expected no finalizer for default orphan policy, got %#v", observed.Finalizers)
+	}
+}
+
+func TestIdentityReconcilerCreatesOrganizationIdentityAndProjectMembership(t *testing.T) {
+	membershipReads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testOrganizationIdentityPath:
+			var body struct {
+				Name           string `json:"name"`
+				OrganizationID string `json:"organizationId"`
+				Role           string `json:"role"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode organization identity request: %v", err)
+			}
+			if body.Name != testWorkload || body.OrganizationID != testOrganizationID || body.Role != "no-access" {
+				t.Errorf("unexpected organization identity request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","orgId":"org-1","role":"no-access"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testOrganizationIdentityByIDPath:
+			_, _ = writer.Write([]byte(`{"identity":{"id":"membership-1","identityId":"identity-1","orgId":"org-1","role":"no-access","identity":{"id":"identity-1","name":"workload","orgId":"org-1","hasDeleteProtection":false}}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testSecondMembershipPath:
+			membershipReads++
+			if membershipReads == 1 {
+				http.Error(writer, "membership not found", http.StatusNotFound)
+				return
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-2","projectId":"project-2","identityId":"identity-1","roles":[{"id":"assignment-1","role":"member","isTemporary":false}]}}`))
+		case request.Method == http.MethodPost && request.URL.Path == testSecondMembershipPath:
+			var body infisicalMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode organization membership request: %v", err)
+			}
+			if len(body.Roles) != 1 || body.Roles[0].Role != testMemberRole || body.Roles[0].IsTemporary {
+				t.Errorf("unexpected organization membership request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-2","projectId":"project-2","identityId":"identity-1"}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	anchor := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testProjectID, OrganizationID: testOrganizationID},
+	}
+	boundProject := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: "secondary", Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testSecondProjectID, OrganizationID: testOrganizationID},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			Scope:         infisicalv1alpha1.IdentityScopeOrganization,
+			OrganizationRef: &infisicalv1alpha1.LocalObjectReference{
+				Name: anchor.Name,
+			},
+			ProjectRoleBindings: []infisicalv1alpha1.IdentityProjectRoleBinding{{
+				ProjectRef: infisicalv1alpha1.LocalObjectReference{Name: boundProject.Name},
+				RoleSlugs:  []string{testMemberRole},
+			}},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, anchor, boundProject, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile organization identity: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get organization identity: %v", err)
+	}
+	if observed.Status.IdentityID != testIdentityID || observed.Status.OrganizationID != testOrganizationID || observed.Status.OrganizationRole != "no-access" {
+		t.Fatalf("unexpected organization identity status: %#v", observed.Status)
+	}
+	if len(observed.Status.ProjectMemberships) != 1 || observed.Status.ProjectMemberships[0].ProjectID != testSecondProjectID || observed.Status.ProjectMemberships[0].MembershipID != "membership-2" {
+		t.Fatalf("unexpected organization project membership status: %#v", observed.Status.ProjectMemberships)
+	}
+	if len(observed.Status.ProjectMemberships[0].Roles) != 1 || observed.Status.ProjectMemberships[0].Roles[0].Slug != testMemberRole {
+		t.Fatalf("unexpected organization role status: %#v", observed.Status.ProjectMemberships[0].Roles)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
 }
 
@@ -304,7 +403,7 @@ func TestIdentityReconcilerCreatesPermanentRoleMembership(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testMemberRole, testCustomReaderRole},
 		},
 	}
@@ -355,7 +454,7 @@ func TestIdentityReconcilerAdoptsIdentityAndRoleMembership(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef:  infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:     infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:     identityProjectRef(project.Name),
 			CreationPolicy: infisicalv1alpha1.CreationPolicyCreateOrAdopt,
 			RoleSlugs:      []string{testMemberRole},
 		},
@@ -385,7 +484,7 @@ func TestIdentityReconcilerWaitsForProjectStatus(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testMemberRole},
 		},
 	}
@@ -472,7 +571,7 @@ func TestIdentityReconcilerCorrectsRoleMembershipDrift(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testCustomReaderRole},
 		},
 		Status: infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},
@@ -519,7 +618,7 @@ func TestIdentityReconcilerReportsRoleMembershipError(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testCustomReaderRole},
 		},
 		Status: infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},

@@ -10,7 +10,11 @@ The operator is a control-plane integration. It does not synchronize Infisical s
 
 ## Kubernetes permissions
 
-The default chart uses a cluster-wide manager because the operator watches namespaced custom resources across the cluster. Its ClusterRole can read Secrets and manage these CRDs in all namespaces. This is a deliberate single-controller deployment choice, not a multi-tenant isolation claim. Multi-tenancy remains an explicit evaluation item in the [backlog](../backlog.md).
+The default chart uses a cluster-wide manager because the operator watches namespaced custom resources across the cluster. Its ClusterRole can read Secrets and manage these CRDs in all namespaces. This is a deliberate trusted-platform deployment choice, not a Kubernetes tenant-isolation claim.
+
+For tenant principals, `InfisicalIdentity` can create an organization-scoped machine identity with Infisical’s `no-access` organization role and explicit project-role bindings. A binding is accepted only when the referenced project reports the same organization as `organizationRef`. This limits the identity’s intended Infisical scope, but it cannot revoke memberships created outside the listed bindings and does not restrict Kubernetes users from creating arbitrary CRs.
+
+The recommended vCluster model is one operator deployment per tenant cluster, using a machine-identity credential created by the trusted platform installation. The tenant operator’s Kubernetes RBAC and Infisical roles are the enforcement boundary. A shared cluster-wide operator should be treated as trusted because its cache and Secret permissions span namespaces.
 
 Run namespace-scoped deployments and narrower RBAC only after completing that evaluation. Do not introduce cross-namespace references or shared bearer-token Secrets as a shortcut.
 

@@ -98,9 +98,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - key
                 x-kubernetes-list-type: map
-              projectRef:
-                description: ProjectRef references the InfisicalProject resource that
-                  owns this identity.
+              organizationRef:
+                description: |-
+                  OrganizationRef references an InfisicalProject resource whose observed organization owns
+                  an organization-scoped identity. The project itself need not be listed in projectRoleBindings.
                 properties:
                   name:
                     description: Name is the referenced resource name.
@@ -109,6 +110,58 @@ spec:
                 required:
                 - name
                 type: object
+              organizationRole:
+                description: |-
+                  OrganizationRole is the Infisical organization role for an organization-scoped identity.
+                  Leave it empty to use Infisical's least-privilege no-access role. Project-scoped identities
+                  must omit this field.
+                minLength: 1
+                type: string
+              projectRef:
+                description: ProjectRef references the InfisicalProject resource that
+                  owns a project-scoped identity.
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              projectRoleBindings:
+                description: |-
+                  ProjectRoleBindings grants an organization-scoped identity roles in selected projects.
+                  A binding manages that project's complete permanent role list; omitted projects are left
+                  unmanaged. Every referenced project must belong to the organization from organizationRef.
+                items:
+                  description: IdentityProjectRoleBinding declares the permanent project
+                    roles for an organization-scoped identity.
+                  properties:
+                    projectRef:
+                      description: ProjectRef references the project receiving this
+                        identity's roles.
+                      properties:
+                        name:
+                          description: Name is the referenced resource name.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    roleSlugs:
+                      description: RoleSlugs is the complete permanent role set for
+                        this project membership.
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  required:
+                  - projectRef
+                  - roleSlugs
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               roleSlugs:
                 description: |-
                   RoleSlugs declares the permanent project role slugs assigned to the identity.
@@ -119,15 +172,40 @@ spec:
                 minItems: 1
                 type: array
                 x-kubernetes-list-type: atomic
+              scope:
+                default: Project
+                description: |-
+                  Scope selects whether Infisical manages this identity at project or organization scope.
+                  It defaults to Project. Organization-scoped identities are useful as tenant principals:
+                  assign their project access through projectRoleBindings.
+                enum:
+                - Project
+                - Organization
+                type: string
             required:
             - connectionRef
-            - projectRef
             type: object
             x-kubernetes-validations:
             - message: connectionRef is immutable; delete and recreate the InfisicalIdentity
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
+            - message: scope is immutable; delete and recreate the InfisicalIdentity
+              rule: '!has(oldSelf.scope) || self.scope == oldSelf.scope'
             - message: projectRef is immutable; delete and recreate the InfisicalIdentity
               rule: '!has(oldSelf.projectRef) || self.projectRef == oldSelf.projectRef'
+            - message: organizationRef is immutable; delete and recreate the InfisicalIdentity
+              rule: '!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef'
+            - message: Project scope requires projectRef and Organization scope requires
+                organizationRef
+              rule: 'self.scope == ''Organization'' ? has(self.organizationRef) &&
+                (!has(self.projectRef) || size(self.projectRef.name) == 0) : has(self.projectRef)
+                && size(self.projectRef.name) > 0 && !has(self.organizationRef)'
+            - message: roleSlugs is only valid for Project scope and projectRoleBindings
+                is only valid for Organization scope
+              rule: 'self.scope == ''Organization'' ? (!has(self.roleSlugs) || size(self.roleSlugs)
+                == 0) : (!has(self.projectRoleBindings) || size(self.projectRoleBindings)
+                == 0)'
+            - message: organizationRole is only valid for Organization scope
+              rule: self.scope == 'Organization' || !has(self.organizationRole)
           status:
             description: status defines the observed state of InfisicalIdentity
             properties:
@@ -205,9 +283,58 @@ spec:
                   in status.
                 format: int64
                 type: integer
+              organizationID:
+                description: OrganizationID is the observed owning organization identifier
+                  for an organization-scoped identity.
+                type: string
+              organizationRole:
+                description: OrganizationRole is the observed organization role for
+                  an organization-scoped identity.
+                type: string
               projectID:
                 description: ProjectID is the observed owning project identifier.
                 type: string
+              projectMemberships:
+                description: ProjectMemberships contains observed memberships managed
+                  through projectRoleBindings.
+                items:
+                  description: IdentityProjectMembershipStatus describes an observed
+                    project membership for an organization-scoped identity.
+                  properties:
+                    membershipID:
+                      description: MembershipID is the Infisical project membership
+                        identifier.
+                      type: string
+                    projectID:
+                      description: ProjectID is the Infisical project identifier.
+                      type: string
+                    roles:
+                      description: Roles contains the observed permanent or temporary
+                        roles.
+                      items:
+                        description: IdentityRoleStatus describes an observed permanent
+                          or temporary project role.
+                        properties:
+                          isTemporary:
+                            description: IsTemporary reports whether Infisical marked
+                              the assignment as temporary.
+                            type: boolean
+                          name:
+                            description: Name is the custom role display name when
+                              available.
+                            type: string
+                          roleID:
+                            description: RoleID is the Infisical role assignment identifier.
+                            type: string
+                          slug:
+                            description: Slug is the built-in or custom role slug.
+                            type: string
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               roles:
                 description: Roles contains the observed project roles when role management
                   is enabled.

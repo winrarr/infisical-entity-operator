@@ -1,6 +1,6 @@
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical projects, environments, project roles, machine identities, and Kubernetes Auth.
+Kubernetes-native lifecycle management for Infisical projects, environments, project roles, project- and organization-scoped machine identities, and Kubernetes Auth.
 
 The operator gives platform teams a declarative boundary around the Infisical control plane:
 
@@ -61,6 +61,8 @@ spec:
 An environment, project role, or Kubernetes Auth resource can reference the project or identity in the same namespace and will wait for that dependency to become ready.
 
 Set `spec.roleSlugs` on an identity to manage its permanent Infisical project roles. Omit the field to leave an existing membership unmanaged; use the built-in `no-access` role explicitly when an identity should have no project permissions.
+
+For platform-managed tenant principals, set `spec.scope: Organization`, point `spec.organizationRef` at a ready `InfisicalProject`, and declare the tenant’s project permissions in `spec.projectRoleBindings`. The organization identity defaults to Infisical’s `no-access` role and only receives the explicitly listed project roles.
 
 Install the chart and CRDs from a repository checkout:
 

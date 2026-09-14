@@ -14,7 +14,7 @@ Use role slugs rather than role IDs in desired state. Normalize Infisical’s bu
 
 Infisical’s current membership API assigns roles by project ID and identity ID, and supports a role list on create and update. Role slugs keep manifests portable across environments and allow custom roles to be created independently. Optional management preserves existing identities whose manifests do not yet declare role membership, while `no-access` provides an explicit least-privilege state.
 
-The operator does not introduce a separate membership CRD because the initial product scope is a project-scoped identity with one owning project. A separate resource can be considered if identities become shared across projects.
+Project-scoped identities remain a one-project resource. Organization-scoped identities and their multiple project memberships are handled by the scope and binding fields described in [0006: Use organization-scoped identities for tenant principals](0006-organization-scoped-identities-for-tenant-principals.md), rather than by a separate membership CRD.
 
 ## Constraints
 
