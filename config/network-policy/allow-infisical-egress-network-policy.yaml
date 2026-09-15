@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: controller-to-infisical
+  namespace: infisical-entity-operator-system
+  labels:
+    app.kubernetes.io/name: infisical-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  podSelector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: infisical-entity-operator
+  policyTypes:
+    - Egress
+  egress:
+    # Kind's default Kubernetes Service CIDR. This permits access to the
+    # kubernetes.default service when a NetworkPolicy-capable CNI is used.
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.0/12
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: infisical
+          podSelector:
+            matchLabels:
+              component: infisical
+              app: infisical-standalone
+              release: infisical
+      ports:
+        - port: 8080
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

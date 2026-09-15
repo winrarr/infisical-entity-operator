@@ -30,7 +30,7 @@ Secret synchronization is intentionally outside this project. Use Infisical’s 
 ## Development and operations
 
 - [Verification guide](verification.md): canonical checks, evidence coverage, and known limitations.
-- [Local Kind operations](operations/local-kind.md): Cilium, Infisical, e2e, troubleshooting, and cleanup.
+- [Local Kind operations](operations/local-kind.md): default-CNI Kind, optional Cilium setup, Infisical, e2e, troubleshooting, and cleanup.
 - [Backlog](backlog.md): planned outcomes that are not implemented.
 - [Tech-debt register](tech-debt.md): known current shortcomings and exit criteria.
 

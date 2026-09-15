@@ -1,6 +1,6 @@
 # Development
 
-The project uses a Makefile as its task entrypoint. It keeps Go generation, Helm rendering, documentation generation, and the Cilium-backed Kind environment in one discoverable workflow.
+The project uses a Makefile as its task entrypoint. It keeps Go generation, Helm rendering, documentation generation, and the default-CNI Kind environment in one discoverable workflow, while retaining an explicit Cilium setup target for scenarios that need it.
 
 Before submitting a change, run:
 

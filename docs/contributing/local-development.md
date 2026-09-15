@@ -16,6 +16,6 @@ make kind-e2e
 make kind-down
 ```
 
-It creates a named Kind cluster, installs Cilium and the pinned Infisical standalone chart, builds and deploys the operator, then exercises reconciliation and egress policy behavior. The [local Kind operations](../operations/local-kind.md) guide covers prerequisites, overrides, cleanup, and known plan limitations.
+It creates a named Kind cluster with the default CNI and the pinned Infisical standalone chart, builds and deploys the operator, then exercises reconciliation with the standard egress policy manifest. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The [local Kind operations](../operations/local-kind.md) guide covers prerequisites, mode switching, cleanup, and known plan limitations.
 
 Do not commit `bin/`, `dist/`, `tmp/`, coverage output, kubeconfigs, local bootstrap credentials, or Infisical tokens.

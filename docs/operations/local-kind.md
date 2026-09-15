@@ -1,6 +1,6 @@
 # Local Kind operations
 
-The local environment is disposable and isolated. It uses Kind with the default CNI disabled, Cilium for networking, the official Infisical standalone chart with in-cluster PostgreSQL and Redis, and the operator chart built from the checkout.
+The local environment is disposable and isolated. The fast `kind-e2e` path uses Kind's default CNI, the official Infisical standalone chart with in-cluster PostgreSQL and Redis, and the operator chart built from the checkout. Cilium remains available by overriding the setup with `KIND_CNI=cilium`.
 
 ## Start and test
 
@@ -11,17 +11,19 @@ make kind-e2e
 The command:
 
 - creates the `infisical-entity-operator` Kind cluster;
-- installs Cilium `1.20.1` and enables Hubble relay;
+- keeps Kind's default CNI enabled;
 - installs Infisical `v0.165.8` from standalone chart `1.10.0`;
 - generates a random bootstrap password for this cluster invocation;
 - waits for the chart bootstrap job and reads its generated token only inside the cluster;
 - builds and loads the operator image;
 - installs the CRDs and operator chart;
-- applies `config/network-policy/allow-infisical-egress.yaml`;
+- applies the standard `config/network-policy/allow-infisical-egress-network-policy.yaml`;
 - creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
 - creates a project-template resource and uses it for the primary project when the local Infisical plan permits templates; otherwise it records the plan restriction and verifies ordinary project reconciliation;
 - creates project-role and Kubernetes Auth resources and verifies their external error handling when the local Infisical plan rejects custom roles or cluster-local Kubernetes review URLs;
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
+
+The default Kind CNI makes this a fast reconciliation test. It does not provide evidence that NetworkPolicy rules are enforced; that depends on the installed CNI. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The default and Cilium modes use the same named cluster, so run `make kind-down` before switching between them.
 
 The generated instance-admin token is a cluster Secret named `infisical-bootstrap-token` in namespace `infisical`. It is intentionally not written to the checkout or printed by the test.
 
@@ -31,7 +33,7 @@ The multi-tenancy targets use the bootstrap user credentials stored in `infisica
 
 ```sh
 kubectl get pods -A
-kubectl get ciliumnetworkpolicy -n infisical-entity-operator-system
+kubectl get networkpolicy -n infisical-entity-operator-system
 kubectl describe infisicalproject e2e-project -n infisical-entity-operator-e2e
 kubectl describe infisicalprojectrole e2e-project-role -n infisical-entity-operator-e2e
 kubectl describe infisicalkubernetesauth e2e-kubernetes-auth -n infisical-entity-operator-e2e
@@ -39,7 +41,7 @@ kubectl logs deployment/infisical-entity-operator-infisical-entity-operator -n i
 kubectl logs job/infisical-bootstrap-1 -n infisical
 ```
 
-The policy intentionally restricts the selected manager pods to Kubernetes API, DNS, and the labeled Infisical service. If reconciliation fails after the policy is applied, inspect the policy endpoint labels and the Cilium agent status before loosening the rule.
+The standard policy describes egress to the Kubernetes API Service CIDR, DNS, and the labeled Infisical service. Its enforcement depends on the installed CNI. If a Cilium-backed scenario fails after policy changes, inspect the Cilium policy and agent status before loosening the rule.
 
 ## Cleanup
 
