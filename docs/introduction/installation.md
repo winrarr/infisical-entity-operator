@@ -1,6 +1,6 @@
 # Installation
 
-The Helm chart is the primary installation path. It installs the operator Deployment, RBAC, ServiceAccount, and all seven CRDs.
+The Helm chart is the primary installation path. It installs the operator Deployment, RBAC, ServiceAccount, and all eight CRDs.
 
 ## Install from a checkout
 

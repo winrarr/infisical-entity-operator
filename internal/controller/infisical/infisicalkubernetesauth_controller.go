@@ -18,6 +18,7 @@ package infisical
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -66,6 +67,9 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 		return r.reconcileKubernetesAuthDeletion(ctx, &auth)
 	}
 	before := auth.Status
+	if err := validateKubernetesAuthSpec(&auth); err != nil {
+		return r.kubernetesAuthError(ctx, &auth, "InvalidSpec", err)
+	}
 
 	var identity infisicalv1alpha1.InfisicalIdentity
 	if err := r.Get(ctx, client.ObjectKey{Namespace: auth.Namespace, Name: auth.Spec.IdentityRef.Name}, &identity); err != nil {
@@ -147,22 +151,27 @@ func (r *InfisicalKubernetesAuthReconciler) kubernetesAuthSecrets(ctx context.Co
 }
 
 func kubernetesAuthRequestFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, caCert, tokenReviewerJWT string) infisicalclient.CreateKubernetesAuthRequest {
-	return infisicalclient.CreateKubernetesAuthRequest{
-		KubernetesHost:          auth.Spec.KubernetesHost,
-		CACert:                  caCert,
-		VerifyTLSCertificate:    auth.Spec.VerifyTLSCertificate,
-		TokenReviewerJWT:        tokenReviewerJWT,
-		TokenReviewMode:         string(kubernetesAuthMode(auth.Spec.TokenReviewMode)),
+	request := infisicalclient.CreateKubernetesAuthRequest{
+		TemplateID:              auth.Spec.TemplateID,
 		AllowedNamespaces:       joinCSV(auth.Spec.AllowedNamespaces),
 		AllowedNames:            joinCSV(auth.Spec.AllowedNames),
-		AllowedAudience:         auth.Spec.AllowedAudience,
-		GatewayID:               auth.Spec.GatewayID,
-		GatewayPoolID:           auth.Spec.GatewayPoolID,
 		AccessTokenTrustedIPs:   kubernetesTrustedIPsFrom(auth.Spec.AccessTokenTrustedIPs),
 		AccessTokenTTL:          auth.Spec.AccessTokenTTL,
 		AccessTokenMaxTTL:       auth.Spec.AccessTokenMaxTTL,
 		AccessTokenNumUsesLimit: auth.Spec.AccessTokenNumUsesLimit,
 	}
+	if auth.Spec.TemplateID != "" {
+		return request
+	}
+	request.KubernetesHost = auth.Spec.KubernetesHost
+	request.CACert = caCert
+	request.VerifyTLSCertificate = auth.Spec.VerifyTLSCertificate
+	request.TokenReviewerJWT = tokenReviewerJWT
+	request.TokenReviewMode = string(kubernetesAuthMode(auth.Spec.TokenReviewMode))
+	request.AllowedAudience = auth.Spec.AllowedAudience
+	request.GatewayID = auth.Spec.GatewayID
+	request.GatewayPoolID = auth.Spec.GatewayPoolID
+	return request
 }
 
 func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, caCert, tokenReviewerJWT string) infisicalclient.KubernetesAuthPatch {
@@ -170,13 +179,17 @@ func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, ca
 	allowedNamespaces := joinCSV(auth.Spec.AllowedNamespaces)
 	allowedNames := joinCSV(auth.Spec.AllowedNames)
 	patch := infisicalclient.KubernetesAuthPatch{
+		TemplateID:              stringPointerIfSet(auth.Spec.TemplateID),
 		AllowedNamespaces:       &allowedNamespaces,
 		AllowedNames:            &allowedNames,
-		TokenReviewMode:         &mode,
 		AccessTokenTTL:          auth.Spec.AccessTokenTTL,
 		AccessTokenMaxTTL:       auth.Spec.AccessTokenMaxTTL,
 		AccessTokenNumUsesLimit: auth.Spec.AccessTokenNumUsesLimit,
 	}
+	if auth.Spec.TemplateID != "" {
+		return patch
+	}
+	patch.TokenReviewMode = &mode
 	if auth.Spec.KubernetesHost != "" {
 		patch.KubernetesHost = &auth.Spec.KubernetesHost
 	}
@@ -203,6 +216,16 @@ func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, ca
 		patch.AccessTokenTrustedIPs = &trustedIPs
 	}
 	return patch
+}
+
+func validateKubernetesAuthSpec(auth *infisicalv1alpha1.InfisicalKubernetesAuth) error {
+	if auth.Spec.TemplateID == "" {
+		return nil
+	}
+	if auth.Spec.KubernetesHost != "" || auth.Spec.CACertSecretRef != nil || auth.Spec.TokenReviewerJWTSecretRef != nil || auth.Spec.TokenReviewMode != "" || auth.Spec.GatewayID != "" || auth.Spec.GatewayPoolID != "" || auth.Spec.AllowedAudience != "" {
+		return fmt.Errorf("templateID cannot be combined with kubernetesHost, caCertSecretRef, tokenReviewerJWTSecretRef, tokenReviewMode, gatewayID, gatewayPoolID, or allowedAudience")
+	}
+	return nil
 }
 
 func kubernetesAuthMode(mode infisicalv1alpha1.KubernetesTokenReviewMode) infisicalv1alpha1.KubernetesTokenReviewMode {
@@ -235,6 +258,9 @@ func kubernetesTrustedIPsTo(ips []infisicalclient.TrustedIP) []infisicalv1alpha1
 }
 
 func kubernetesAuthNeedsUpdate(auth *infisicalv1alpha1.InfisicalKubernetesAuth, current *infisicalclient.KubernetesAuth, caCert, tokenReviewerJWT string) bool {
+	if auth.Spec.TemplateID != "" && current.TemplateID != auth.Spec.TemplateID {
+		return true
+	}
 	if current.AllowedNamespaces != joinCSV(auth.Spec.AllowedNamespaces) || current.AllowedNames != joinCSV(auth.Spec.AllowedNames) {
 		return true
 	}
@@ -277,6 +303,7 @@ func kubernetesAuthNeedsUpdate(auth *infisicalv1alpha1.InfisicalKubernetesAuth, 
 func (r *InfisicalKubernetesAuthReconciler) setKubernetesAuthObservedState(auth *infisicalv1alpha1.InfisicalKubernetesAuth, observed *infisicalclient.KubernetesAuth, identityID string) {
 	auth.Status.AuthID = observed.ID
 	auth.Status.IdentityID = identityID
+	auth.Status.TemplateID = observed.TemplateID
 	auth.Status.KubernetesHost = observed.KubernetesHost
 	auth.Status.AllowedNamespaces = splitCSV(observed.AllowedNamespaces)
 	auth.Status.AllowedNames = splitCSV(observed.AllowedNames)
@@ -287,6 +314,7 @@ func (r *InfisicalKubernetesAuthReconciler) setKubernetesAuthObservedState(auth 
 	auth.Status.VerifyTLSCertificate = observed.VerifyTLSCertificate
 	auth.Status.HasCACertificate = observed.CACert != ""
 	auth.Status.HasTokenReviewerJWT = observed.TokenReviewerJWT != ""
+	auth.Status.TokenReviewerJWTTemplateSourced = observed.TokenReviewerJWTTemplateSourced
 	auth.Status.AccessTokenTrustedIPs = kubernetesTrustedIPsTo(observed.AccessTokenTrustedIPs)
 	auth.Status.AccessTokenTTL = observed.AccessTokenTTL
 	auth.Status.AccessTokenMaxTTL = observed.AccessTokenMaxTTL

@@ -16,6 +16,7 @@ Package v1alpha1 contains API Schema definitions for the infisical v1alpha1 API 
 - [InfisicalOrganization](#infisicalorganization)
 - [InfisicalProject](#infisicalproject)
 - [InfisicalProjectRole](#infisicalprojectrole)
+- [InfisicalProjectTemplate](#infisicalprojecttemplate)
 
 
 
@@ -35,6 +36,7 @@ _Appears in:_
 - [InfisicalOrganizationSpec](#infisicalorganizationspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
 
 | Field | Description |
 | --- | --- |
@@ -59,6 +61,7 @@ _Appears in:_
 - [InfisicalOrganizationSpec](#infisicalorganizationspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
 
 | Field | Description |
 | --- | --- |
@@ -152,6 +155,7 @@ _Appears in:_
 - [InfisicalOrganizationSpec](#infisicalorganizationspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -294,6 +298,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection. |  |  |
 | `identityRef` _[LocalObjectReference](#localobjectreference)_ | IdentityRef references the InfisicalIdentity receiving this auth method. |  |  |
+| `templateID` _string_ | TemplateID selects an Infisical Kubernetes Auth template. When set, Infisical manages<br />KubernetesHost, CACertSecretRef, TokenReviewerJWTSecretRef, TokenReviewMode, GatewayID,<br />GatewayPoolID, and AllowedAudience from that template; those fields must be omitted. |  | Format: uuid <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `kubernetesHost` _string_ | KubernetesHost is the Kubernetes API server URL Infisical uses for token review. |  | MaxLength: 255 <br />Optional: \{\} <br /> |
 | `allowedNamespaces` _string array_ | AllowedNamespaces lists the Kubernetes namespaces trusted to authenticate. |  | MinItems: 1 <br /> |
 | `allowedNames` _string array_ | AllowedNames lists the service account names trusted to authenticate. |  | MinItems: 1 <br /> |
@@ -301,9 +306,9 @@ _Appears in:_
 | `caCertSecretRef` _[SecretKeyReference](#secretkeyreference)_ | CACertSecretRef references a Secret containing the PEM-encoded Kubernetes API CA certificate. |  | Optional: \{\} <br /> |
 | `verifyTLSCertificate` _boolean_ | VerifyTLSCertificate controls Kubernetes API server certificate verification. |  | Optional: \{\} <br /> |
 | `tokenReviewerJWTSecretRef` _[SecretKeyReference](#secretkeyreference)_ | TokenReviewerJWTSecretRef references a Secret containing a token for the Kubernetes TokenReview API.<br />If omitted, Infisical can use the authenticating workload token when configured for that mode. |  | Optional: \{\} <br /> |
-| `tokenReviewMode` _[KubernetesTokenReviewMode](#kubernetestokenreviewmode)_ | TokenReviewMode selects the API-server or gateway token review path. | api | Enum: [api gateway] <br />Optional: \{\} <br /> |
-| `gatewayID` _string_ | GatewayID selects an Infisical gateway for token review when gateway mode is used. |  | Optional: \{\} <br /> |
-| `gatewayPoolID` _string_ | GatewayPoolID selects an Infisical gateway pool for token review when gateway mode is used. |  | Optional: \{\} <br /> |
+| `tokenReviewMode` _[KubernetesTokenReviewMode](#kubernetestokenreviewmode)_ | TokenReviewMode selects the API-server or gateway token review path. |  | Enum: [api gateway] <br />Optional: \{\} <br /> |
+| `gatewayID` _string_ | GatewayID selects an Infisical gateway for token review when gateway mode is used. |  | Format: uuid <br />Optional: \{\} <br /> |
+| `gatewayPoolID` _string_ | GatewayPoolID selects an Infisical gateway pool for token review when gateway mode is used. |  | Format: uuid <br />Optional: \{\} <br /> |
 | `accessTokenTrustedIPs` _[KubernetesTrustedIP](#kubernetestrustedip) array_ | AccessTokenTrustedIPs limits where issued access tokens may be used. |  | Optional: \{\} <br /> |
 | `accessTokenTTL` _integer_ | AccessTokenTTL is the access token lifetime in seconds. |  | Maximum: 3.1536e+08 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `accessTokenMaxTTL` _integer_ | AccessTokenMaxTTL is the maximum access token lifetime in seconds. |  | Maximum: 3.1536e+08 <br />Minimum: 0 <br />Optional: \{\} <br /> |
@@ -424,14 +429,62 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection. |  |  |
 | `organizationRef` _[LocalObjectReference](#localobjectreference)_ | OrganizationRef optionally identifies the Infisical organization in which this project<br />must be created or adopted. When set, the observed project organization must match it. |  | Optional: \{\} <br /> |
+| `templateRef` _[LocalObjectReference](#localobjectreference)_ | TemplateRef optionally selects an InfisicalProjectTemplate to apply during project creation.<br />Template changes are not propagated to an existing project because Infisical applies the<br />template only when the project is created. |  | Optional: \{\} <br /> |
 | `projectName` _string_ | ProjectName is the Infisical project name. If omitted, metadata.name is used. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `description` _string_ | Description is an optional project description. |  | MaxLength: 1024 <br />Optional: \{\} <br /> |
 | `slug` _string_ | Slug is an optional unique project slug. |  | MaxLength: 64 <br />MinLength: 5 <br />Optional: \{\} <br /> |
-| `type` _[ProjectType](#projecttype)_ | Type selects the Infisical product type. | secret-manager | Enum: [secret-manager cert-manager kms ssh secret-scanning pam ai] <br />Optional: \{\} <br /> |
+| `kmsKeyID` _string_ | KMSKeyID optionally selects the Infisical KMS key used to protect this project.<br />This is distinct from Type=kms, which selects Infisical's KMS product project type.<br />It is only used during project creation. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `type` _[ProjectType](#projecttype)_ | Type selects the Infisical product type. | secret-manager | Enum: [secret-manager cert-manager kms secret-scanning pam agent-vault] <br />Optional: \{\} <br /> |
 | `shouldCreateDefaultEnvs` _boolean_ | ShouldCreateDefaultEnvs controls whether Infisical creates its default environments.<br />It is only used during project creation. | true | Optional: \{\} <br /> |
 | `hasDeleteProtection` _boolean_ | HasDeleteProtection configures Infisical-side delete protection. | false | Optional: \{\} <br /> |
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the operator creates or adopts a project. | Create | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | DeletionPolicy controls whether the external project is deleted with this resource. | Orphan | Enum: [Delete Orphan] <br />Optional: \{\} <br /> |
+
+
+#### InfisicalProjectTemplate
+
+
+
+InfisicalProjectTemplate is the Schema for the infisicalprojecttemplates API.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `infisical.infisical-operator.io/v1alpha1` | | |
+| `kind` _string_ | `InfisicalProjectTemplate` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)_ | Spec defines the desired state of InfisicalProjectTemplate. |  | Required: \{\} <br /> |
+
+
+#### InfisicalProjectTemplateSpec
+
+
+
+InfisicalProjectTemplateSpec defines the desired state of an Infisical project template.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplate](#infisicalprojecttemplate)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection. |  |  |
+| `organizationRef` _[LocalObjectReference](#localobjectreference)_ | OrganizationRef optionally identifies the organization that owns this template. |  | Optional: \{\} <br /> |
+| `templateName` _string_ | TemplateName is the Infisical template name. If omitted, metadata.name is used. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `description` _string_ | Description is an optional template description. |  | MaxLength: 256 <br />Optional: \{\} <br /> |
+| `type` _[ProjectType](#projecttype)_ | Type selects the Infisical product type for projects created from this template. | secret-manager | Enum: [secret-manager cert-manager kms secret-scanning pam agent-vault] <br />Optional: \{\} <br /> |
+| `roles` _[ProjectTemplateRole](#projecttemplaterole) array_ | Roles contains the custom project roles created by this template. |  | Optional: \{\} <br /> |
+| `environments` _[ProjectTemplateEnvironment](#projecttemplateenvironment) array_ | Environments contains the environments created by this template. |  | Optional: \{\} <br /> |
+| `users` _[ProjectTemplateUser](#projecttemplateuser) array_ | Users contains users automatically added to projects created from this template. |  | Optional: \{\} <br /> |
+| `groups` _[ProjectTemplateGroup](#projecttemplategroup) array_ | Groups contains groups automatically added to projects created from this template.<br />Group support depends on the Infisical plan and group configuration. |  | Optional: \{\} <br /> |
+| `identities` _[ProjectTemplateIdentity](#projecttemplateidentity) array_ | Identities contains organization-owned identities automatically added to projects. |  | Optional: \{\} <br /> |
+| `projectManagedIdentities` _[ProjectTemplateManagedIdentity](#projecttemplatemanagedidentity) array_ | ProjectManagedIdentities contains project-owned identities created from this template. |  | Optional: \{\} <br /> |
+| `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the operator creates or adopts a template. | Create | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
+| `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | DeletionPolicy controls whether the external template is deleted with this resource. | Orphan | Enum: [Delete Orphan] <br />Optional: \{\} <br /> |
 
 
 #### KubernetesTokenReviewMode
@@ -483,6 +536,7 @@ _Appears in:_
 - [InfisicalKubernetesAuthSpec](#infisicalkubernetesauthspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -519,6 +573,7 @@ ProjectRolePermission defines one subject/action permission rule.
 
 _Appears in:_
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
+- [ProjectTemplateRole](#projecttemplaterole)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -564,6 +619,110 @@ _Appears in:_
 | `$glob` _string_ | Glob matches a glob pattern. |  | Optional: \{\} <br /> |
 
 
+#### ProjectTemplateEnvironment
+
+
+
+ProjectTemplateEnvironment describes an environment created when a project uses a template.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the environment display name. |  | MinLength: 1 <br /> |
+| `slug` _string_ | Slug is the stable environment slug. |  | MaxLength: 64 <br />MinLength: 1 <br /> |
+| `position` _integer_ | Position controls the environment order in the project. |  | Minimum: 1 <br /> |
+
+
+#### ProjectTemplateGroup
+
+
+
+ProjectTemplateGroup assigns roles to a group added to projects created from a template.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `groupSlug` _string_ | GroupSlug identifies the Infisical group. |  | MinLength: 1 <br /> |
+| `roles` _string array_ | Roles contains role slugs assigned to the group. |  | MinItems: 1 <br /> |
+
+
+#### ProjectTemplateIdentity
+
+
+
+ProjectTemplateIdentity assigns roles to an organization-owned identity added to projects.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `identityID` _string_ | IdentityID is the Infisical machine identity identifier. |  | Format: uuid <br /> |
+| `roles` _string array_ | Roles contains role slugs assigned to the identity. |  | MinItems: 1 <br /> |
+
+
+#### ProjectTemplateManagedIdentity
+
+
+
+ProjectTemplateManagedIdentity creates a project-owned identity and assigns roles to it.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the project-owned identity name. |  | MinLength: 1 <br /> |
+| `roles` _string array_ | Roles contains role slugs assigned to the identity. |  | MinItems: 1 <br /> |
+
+
+#### ProjectTemplateRole
+
+
+
+ProjectTemplateRole describes one custom role in a project template.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the role display name. |  | MinLength: 1 <br /> |
+| `slug` _string_ | Slug is the stable role slug. |  | MaxLength: 64 <br />MinLength: 1 <br /> |
+| `permissions` _[ProjectRolePermission](#projectrolepermission) array_ | Permissions contains the role permission rules. |  | Optional: \{\} <br /> |
+
+
+#### ProjectTemplateUser
+
+
+
+ProjectTemplateUser assigns roles to a user added to projects created from a template.
+
+
+
+_Appears in:_
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `username` _string_ | Username identifies the Infisical user, normally by username or email. |  | MinLength: 1 <br /> |
+| `roles` _string array_ | Roles contains role slugs assigned to the user. |  | MinItems: 1 <br /> |
+
+
 #### ProjectType
 
 _Underlying type:_ _string_
@@ -571,20 +730,20 @@ _Underlying type:_ _string_
 ProjectType is an Infisical product type.
 
 _Validation:_
-- Enum: [secret-manager cert-manager kms ssh secret-scanning pam ai]
+- Enum: [secret-manager cert-manager kms secret-scanning pam agent-vault]
 
 _Appears in:_
 - [InfisicalProjectSpec](#infisicalprojectspec)
+- [InfisicalProjectTemplateSpec](#infisicalprojecttemplatespec)
 
 | Field | Description |
 | --- | --- |
 | `secret-manager` |  |
 | `cert-manager` |  |
 | `kms` |  |
-| `ssh` |  |
 | `secret-scanning` |  |
 | `pam` |  |
-| `ai` |  |
+| `agent-vault` |  |
 
 
 #### SecretKeyReference

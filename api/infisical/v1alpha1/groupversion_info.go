@@ -44,6 +44,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&InfisicalOrganizationList{},
 		&InfisicalProject{},
 		&InfisicalProjectList{},
+		&InfisicalProjectTemplate{},
+		&InfisicalProjectTemplateList{},
 		&InfisicalIdentity{},
 		&InfisicalIdentityList{},
 		&InfisicalEnvironment{},

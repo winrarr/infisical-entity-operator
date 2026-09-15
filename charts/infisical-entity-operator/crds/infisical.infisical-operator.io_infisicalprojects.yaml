@@ -75,6 +75,13 @@ spec:
                 description: HasDeleteProtection configures Infisical-side delete
                   protection.
                 type: boolean
+              kmsKeyID:
+                description: |-
+                  KMSKeyID optionally selects the Infisical KMS key used to protect this project.
+                  This is distinct from Type=kms, which selects Infisical's KMS product project type.
+                  It is only used during project creation.
+                minLength: 1
+                type: string
               organizationRef:
                 description: |-
                   OrganizationRef optionally identifies the Infisical organization in which this project
@@ -104,6 +111,19 @@ spec:
                 maxLength: 64
                 minLength: 5
                 type: string
+              templateRef:
+                description: |-
+                  TemplateRef optionally selects an InfisicalProjectTemplate to apply during project creation.
+                  Template changes are not propagated to an existing project because Infisical applies the
+                  template only when the project is created.
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               type:
                 default: secret-manager
                 description: Type selects the Infisical product type.
@@ -111,10 +131,9 @@ spec:
                 - secret-manager
                 - cert-manager
                 - kms
-                - ssh
                 - secret-scanning
                 - pam
-                - ai
+                - agent-vault
                 type: string
             required:
             - connectionRef
@@ -124,6 +143,10 @@ spec:
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
             - message: organizationRef is immutable; delete and recreate the InfisicalProject
               rule: '!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef'
+            - message: templateRef is immutable; delete and recreate the InfisicalProject
+              rule: '!has(oldSelf.templateRef) || self.templateRef == oldSelf.templateRef'
+            - message: kmsKeyID is immutable; delete and recreate the InfisicalProject
+              rule: '!has(oldSelf.kmsKeyID) || self.kmsKeyID == oldSelf.kmsKeyID'
             - message: shouldCreateDefaultEnvs is immutable; delete and recreate the
                 InfisicalProject
               rule: '!has(oldSelf.shouldCreateDefaultEnvs) || self.shouldCreateDefaultEnvs

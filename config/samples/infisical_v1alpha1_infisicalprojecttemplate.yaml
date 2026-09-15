@@ -1,0 +1,18 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalProjectTemplate
+metadata:
+  name: platform-defaults
+spec:
+  connectionRef:
+    name: infisical
+  templateName: platform-defaults
+  type: secret-manager
+  environments:
+    - name: Production
+      slug: prod
+      position: 1
+    - name: Development
+      slug: dev
+      position: 2
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan

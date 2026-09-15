@@ -32,6 +32,7 @@ nav = [
       "crds/index.md",
       { "InfisicalConnection" = "crds/infisical-connection.md" },
       { "InfisicalOrganization" = "crds/infisical-organization.md" },
+      { "InfisicalProjectTemplate" = "crds/infisical-project-template.md" },
       { "InfisicalProject" = "crds/infisical-project.md" },
       { "InfisicalEnvironment" = "crds/infisical-environment.md" },
       { "InfisicalProjectRole" = "crds/infisical-project-role.md" },

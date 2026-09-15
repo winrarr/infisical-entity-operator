@@ -53,6 +53,7 @@ type CreateProjectRequest struct {
 	ProjectDescription      string `json:"projectDescription,omitempty"`
 	Slug                    string `json:"slug,omitempty"`
 	Template                string `json:"template"`
+	KMSKeyID                string `json:"kmsKeyId,omitempty"`
 	Type                    string `json:"type"`
 	ShouldCreateDefaultEnvs bool   `json:"shouldCreateDefaultEnvs"`
 	HasDeleteProtection     bool   `json:"hasDeleteProtection"`

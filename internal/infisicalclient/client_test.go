@@ -32,6 +32,7 @@ const (
 	testOrganizationIdentityPath = "/api/v1/identities/identity-1"
 	testOrganizationByIDPath     = "/api/v1/organization/org-1"
 	testTenantName               = "tenant"
+	testProjectTemplatePath      = "/api/v1/project-templates/template-1"
 )
 
 func TestClientUsesAPIPathAndBearerToken(t *testing.T) {
@@ -57,6 +58,46 @@ func TestClientUsesAPIPathAndBearerToken(t *testing.T) {
 	}
 	if project.ID != "project-1" || project.Name != "demo" {
 		t.Fatalf("unexpected project: %#v", project)
+	}
+}
+
+func TestProjectTemplateClientUsesTemplateEndpoints(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/project-templates":
+			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/project-templates":
+			_, _ = writer.Write([]byte(`{"projectTemplates":[{"id":"template-1","name":"platform-defaults","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}]}`))
+		case request.Method == http.MethodGet && request.URL.Path == testProjectTemplatePath:
+			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
+		case request.Method == http.MethodPatch && request.URL.Path == testProjectTemplatePath:
+			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","description":"updated","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
+		case request.Method == http.MethodDelete && request.URL.Path == testProjectTemplatePath:
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	created, err := client.CreateProjectTemplate(context.Background(), CreateProjectTemplateRequest{Name: "platform-defaults", Type: "secret-manager"})
+	if err != nil || created.ID != "template-1" {
+		t.Fatalf("create project template: %#v, %v", created, err)
+	}
+	found, err := client.FindProjectTemplate(context.Background(), "platform-defaults")
+	if err != nil || found == nil || found.ID != "template-1" {
+		t.Fatalf("find project template: %#v, %v", found, err)
+	}
+	updated, err := client.UpdateProjectTemplate(context.Background(), "template-1", ProjectTemplatePatch{Description: "updated", Roles: []ProjectTemplateRole{}})
+	if err != nil || updated.Description != "updated" {
+		t.Fatalf("update project template: %#v, %v", updated, err)
+	}
+	if err := client.DeleteProjectTemplate(context.Background(), "template-1"); err != nil {
+		t.Fatalf("delete project template: %v", err)
 	}
 }
 

@@ -47,6 +47,8 @@ const (
 	testIdentityID                   = "identity-1"
 	testOrganizationID               = "org-1"
 	testSecondProjectID              = "project-2"
+	testProjectTemplateName          = "platform-defaults"
+	testProjectTemplateID            = "template-1"
 	testIdentityPath                 = "/api/v1/projects/project-1/identities"
 	testIdentityByIDPath             = "/api/v1/projects/project-1/identities/identity-1"
 	testMembershipPath               = "/api/v1/projects/project-1/memberships/identities/identity-1"
@@ -83,6 +85,7 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 			&infisicalv1alpha1.InfisicalConnection{},
 			&infisicalv1alpha1.InfisicalOrganization{},
 			&infisicalv1alpha1.InfisicalProject{},
+			&infisicalv1alpha1.InfisicalProjectTemplate{},
 			&infisicalv1alpha1.InfisicalIdentity{},
 			&infisicalv1alpha1.InfisicalEnvironment{},
 			&infisicalv1alpha1.InfisicalKubernetesAuth{},
@@ -303,6 +306,89 @@ func TestProjectReconcilerAddsDeleteFinalizer(t *testing.T) {
 	}
 	if len(observed.Finalizers) != 1 {
 		t.Fatalf("expected delete finalizer, got %#v", observed.Finalizers)
+	}
+}
+
+func TestProjectTemplateAndProjectReconciliersUseTemplate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/project-templates":
+			var body map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode project template request: %v", err)
+			}
+			if body["name"] != testProjectTemplateName || body["type"] != "secret-manager" {
+				t.Errorf("unexpected project template request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","type":"secret-manager","orgId":"org-1","roles":[],"environments":[{"name":"Production","slug":"prod","position":1}],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/project-templates/template-1":
+			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","type":"secret-manager","orgId":"org-1","roles":[],"environments":[{"name":"Production","slug":"prod","position":1}],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
+		case request.Method == http.MethodPost && request.URL.Path == testProjectsPath:
+			var body struct {
+				Template string `json:"template"`
+				KMSKeyID string `json:"kmsKeyId"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode project request: %v", err)
+			}
+			if body.Template != testProjectTemplateName || body.KMSKeyID != "key-1" {
+				t.Errorf("unexpected project request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo","orgId":"org-1","environments":[]}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testProjectByIDPath:
+			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo","orgId":"org-1","environments":[]}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	template := &infisicalv1alpha1.InfisicalProjectTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: testProjectTemplateName, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalProjectTemplateSpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			TemplateName:  testProjectTemplateName,
+			Environments:  []infisicalv1alpha1.ProjectTemplateEnvironment{{Name: "Production", Slug: "prod", Position: 1}},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, template)
+	templateReconciler := &InfisicalProjectTemplateReconciler{Client: kubeClient}
+	request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(template)}
+	if _, err := templateReconciler.Reconcile(context.Background(), request); err != nil {
+		t.Fatalf("reconcile project template: %v", err)
+	}
+
+	var observedTemplate infisicalv1alpha1.InfisicalProjectTemplate
+	if err := kubeClient.Get(context.Background(), request.NamespacedName, &observedTemplate); err != nil {
+		t.Fatalf("get project template: %v", err)
+	}
+	if observedTemplate.Status.TemplateID != testProjectTemplateID || observedTemplate.Status.Name != testProjectTemplateName {
+		t.Fatalf("unexpected project template status: %#v", observedTemplate.Status)
+	}
+
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalProjectSpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			TemplateRef:   &infisicalv1alpha1.LocalObjectReference{Name: template.Name},
+			KMSKeyID:      "key-1",
+		},
+	}
+	if err := kubeClient.Create(context.Background(), project); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	projectReconciler := &InfisicalProjectReconciler{Client: kubeClient}
+	if _, err := projectReconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)}); err != nil {
+		t.Fatalf("reconcile project using template: %v", err)
+	}
+	var observedProject infisicalv1alpha1.InfisicalProject
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(project), &observedProject); err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if observedProject.Status.ProjectID != testProjectID {
+		t.Fatalf("unexpected project status: %#v", observedProject.Status)
 	}
 }
 
@@ -1002,6 +1088,28 @@ func TestKubernetesAuthReconcilerAttachesAuthWithSecretBackedCredentials(t *test
 	}
 	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestKubernetesAuthTemplateOmitsTemplateManagedFields(t *testing.T) {
+	auth := &infisicalv1alpha1.InfisicalKubernetesAuth{
+		Spec: infisicalv1alpha1.InfisicalKubernetesAuthSpec{
+			TemplateID:        "template-1",
+			AllowedNamespaces: []string{"tenant"},
+			AllowedNames:      []string{"workload"},
+		},
+	}
+	request := kubernetesAuthRequestFrom(auth, "should-not-be-sent", "should-not-be-sent")
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal Kubernetes Auth request: %v", err)
+	}
+	if string(encoded) != `{"templateId":"template-1","allowedNamespaces":"tenant","allowedNames":"workload"}` {
+		t.Fatalf("unexpected template-backed Kubernetes Auth request: %s", encoded)
+	}
+	auth.Spec.KubernetesHost = "https://kubernetes.default.svc"
+	if err := validateKubernetesAuthSpec(auth); err == nil {
+		t.Fatal("expected template-managed and per-resource Kubernetes settings to conflict")
 	}
 }
 

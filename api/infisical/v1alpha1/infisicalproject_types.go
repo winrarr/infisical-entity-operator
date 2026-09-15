@@ -22,6 +22,8 @@ import (
 
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalProject"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef",message="organizationRef is immutable; delete and recreate the InfisicalProject"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.templateRef) || self.templateRef == oldSelf.templateRef",message="templateRef is immutable; delete and recreate the InfisicalProject"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.kmsKeyID) || self.kmsKeyID == oldSelf.kmsKeyID",message="kmsKeyID is immutable; delete and recreate the InfisicalProject"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.shouldCreateDefaultEnvs) || self.shouldCreateDefaultEnvs == oldSelf.shouldCreateDefaultEnvs",message="shouldCreateDefaultEnvs is immutable; delete and recreate the InfisicalProject"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.type) || self.type == oldSelf.type",message="type is immutable; delete and recreate the InfisicalProject"
 
@@ -34,6 +36,12 @@ type InfisicalProjectSpec struct {
 	// must be created or adopted. When set, the observed project organization must match it.
 	// +optional
 	OrganizationRef *LocalObjectReference `json:"organizationRef,omitempty"`
+
+	// TemplateRef optionally selects an InfisicalProjectTemplate to apply during project creation.
+	// Template changes are not propagated to an existing project because Infisical applies the
+	// template only when the project is created.
+	// +optional
+	TemplateRef *LocalObjectReference `json:"templateRef,omitempty"`
 
 	// ProjectName is the Infisical project name. If omitted, metadata.name is used.
 	// +optional
@@ -52,10 +60,17 @@ type InfisicalProjectSpec struct {
 	// +kubebuilder:validation:MaxLength=64
 	Slug string `json:"slug,omitempty"`
 
+	// KMSKeyID optionally selects the Infisical KMS key used to protect this project.
+	// This is distinct from Type=kms, which selects Infisical's KMS product project type.
+	// It is only used during project creation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	KMSKeyID string `json:"kmsKeyID,omitempty"`
+
 	// Type selects the Infisical product type.
 	// +optional
 	// +kubebuilder:default="secret-manager"
-	// +kubebuilder:validation:Enum=secret-manager;cert-manager;kms;ssh;secret-scanning;pam;ai
+	// +kubebuilder:validation:Enum=secret-manager;cert-manager;kms;secret-scanning;pam;agent-vault
 	Type ProjectType `json:"type,omitempty"`
 
 	// ShouldCreateDefaultEnvs controls whether Infisical creates its default environments.

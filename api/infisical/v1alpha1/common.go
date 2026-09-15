@@ -36,17 +36,16 @@ const (
 )
 
 // ProjectType is an Infisical product type.
-// +kubebuilder:validation:Enum=secret-manager;cert-manager;kms;ssh;secret-scanning;pam;ai
+// +kubebuilder:validation:Enum=secret-manager;cert-manager;kms;secret-scanning;pam;agent-vault
 type ProjectType string
 
 const (
 	ProjectTypeSecretManager  ProjectType = "secret-manager"
 	ProjectTypeCertManager    ProjectType = "cert-manager"
 	ProjectTypeKMS            ProjectType = "kms"
-	ProjectTypeSSH            ProjectType = "ssh"
 	ProjectTypeSecretScanning ProjectType = "secret-scanning"
 	ProjectTypePAM            ProjectType = "pam"
-	ProjectTypeAI             ProjectType = "ai"
+	ProjectTypeAgentVault     ProjectType = "agent-vault"
 )
 
 // SecretKeyReference identifies a key in a same-namespace Secret.

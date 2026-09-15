@@ -18,6 +18,7 @@ cleanup() {
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalkubernetesauth/e2e-kubernetes-auth --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalprojectrole/e2e-project-role --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalenvironment/e2e-environment --ignore-not-found --wait=true >/dev/null 2>&1 || true
+    "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalprojecttemplate/e2e-template --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalorganization/e2e-organization --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalidentity/e2e-tenant-identity --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalidentity/e2e-identity --ignore-not-found --wait=true >/dev/null 2>&1 || true
@@ -107,19 +108,6 @@ spec:
     key: token
 ---
 apiVersion: infisical.infisical-operator.io/v1alpha1
-kind: InfisicalProject
-metadata:
-  name: e2e-project
-spec:
-  connectionRef:
-    name: infisical
-  projectName: e2e-project
-  slug: e2e-project
-  description: Reconciled by the live Kind test
-  creationPolicy: Create
-  deletionPolicy: Delete
----
-apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalIdentity
 metadata:
   name: e2e-identity
@@ -169,6 +157,48 @@ EOF
 
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalconnection/infisical --timeout=5m
+template_available=true
+cat <<EOF | "${KUBECTL}" -n "${TEST_NAMESPACE}" apply -f -
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalProjectTemplate
+metadata:
+  name: e2e-template
+spec:
+  connectionRef:
+    name: infisical
+  templateName: e2e-template
+  type: secret-manager
+  creationPolicy: Create
+  deletionPolicy: Delete
+EOF
+if wait_for_ready_or_known_block infisicalprojecttemplate/e2e-template "plan restriction" "InfisicalProjectTemplate"; then
+  :
+else
+  wait_result=$?
+  if [[ "${wait_result}" != 2 ]]; then
+    exit "${wait_result}"
+  fi
+  template_available=false
+fi
+template_ref=""
+if [[ "${template_available}" == true ]]; then
+  template_ref=$'  templateRef:\n    name: e2e-template'
+fi
+cat <<EOF | "${KUBECTL}" -n "${TEST_NAMESPACE}" apply -f -
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalProject
+metadata:
+  name: e2e-project
+spec:
+  connectionRef:
+    name: infisical
+${template_ref}
+  projectName: e2e-project
+  slug: e2e-project
+  description: Reconciled by the live Kind test
+  creationPolicy: Create
+  deletionPolicy: Delete
+EOF
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalproject/e2e-project --timeout=5m
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \

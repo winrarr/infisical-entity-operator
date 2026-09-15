@@ -95,11 +95,16 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if !canCreate(project.Spec.CreationPolicy) {
 			return r.projectError(ctx, &project, "CreationNotAllowed", newDependencyError("project was not found and creationPolicy is Adopt"))
 		}
+		templateName, templateErr := r.projectTemplateName(ctx, &project, expectedOrganizationID)
+		if templateErr != nil {
+			return r.projectError(ctx, &project, "ProjectTemplateNotReady", templateErr)
+		}
 		created, createErr := apiClient.CreateProject(ctx, infisicalclient.CreateProjectRequest{
 			ProjectName:             projectName(&project),
 			ProjectDescription:      project.Spec.Description,
 			Slug:                    project.Spec.Slug,
-			Template:                "default",
+			Template:                templateName,
+			KMSKeyID:                project.Spec.KMSKeyID,
 			Type:                    string(projectType(&project)),
 			ShouldCreateDefaultEnvs: boolValue(project.Spec.ShouldCreateDefaultEnvs, true),
 			HasDeleteProtection:     boolValue(project.Spec.HasDeleteProtection, false),
@@ -151,6 +156,27 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.setProjectObservedState(&project, current)
 	setCondition(&project.Status.Conditions, project.Generation, "True", "Ready", "Infisical project is reconciled")
 	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &project, before, project.Status)
+}
+
+func (r *InfisicalProjectReconciler) projectTemplateName(ctx context.Context, project *infisicalv1alpha1.InfisicalProject, expectedOrganizationID string) (string, error) {
+	if project.Spec.TemplateRef == nil || project.Spec.TemplateRef.Name == "" {
+		return "default", nil
+	}
+
+	var template infisicalv1alpha1.InfisicalProjectTemplate
+	if err := r.Get(ctx, client.ObjectKey{Namespace: project.Namespace, Name: project.Spec.TemplateRef.Name}, &template); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", newDependencyError("InfisicalProjectTemplate %s/%s was not found", project.Namespace, project.Spec.TemplateRef.Name)
+		}
+		return "", err
+	}
+	if template.Status.TemplateID == "" || template.Status.Name == "" {
+		return "", newDependencyError("InfisicalProjectTemplate %s/%s has no observed Infisical template", template.Namespace, template.Name)
+	}
+	if expectedOrganizationID != "" && template.Status.OrganizationID != expectedOrganizationID {
+		return "", newDependencyError("InfisicalProjectTemplate %s/%s belongs to organization %q, want %q", template.Namespace, template.Name, template.Status.OrganizationID, expectedOrganizationID)
+	}
+	return template.Status.Name, nil
 }
 
 func (r *InfisicalProjectReconciler) ensureProjectCreatorMembership(ctx context.Context, apiClient *infisicalclient.Client, project *infisicalv1alpha1.InfisicalProject) error {
@@ -264,6 +290,20 @@ func (r *InfisicalProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			for i := range projects.Items {
 				project := &projects.Items[i]
 				if project.Spec.OrganizationRef != nil && project.Spec.OrganizationRef.Name == object.GetName() {
+					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)})
+				}
+			}
+			return requests
+		})).
+		Watches(&infisicalv1alpha1.InfisicalProjectTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
+			var projects infisicalv1alpha1.InfisicalProjectList
+			if err := mgr.GetClient().List(ctx, &projects, client.InNamespace(object.GetNamespace())); err != nil {
+				return nil
+			}
+			requests := make([]ctrl.Request, 0)
+			for i := range projects.Items {
+				project := &projects.Items[i]
+				if project.Spec.TemplateRef != nil && project.Spec.TemplateRef.Name == object.GetName() {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)})
 				}
 			}
