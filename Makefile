@@ -43,7 +43,7 @@ GOLANGCI_LINT_VERSION ?= v2.13.2
 DOCKER_BUILD_CACHE_ARGS ?=
 
 GO := GOTOOLCHAIN=$(GO_TOOLCHAIN) go
-GOFMT := $(shell GOTOOLCHAIN=$(GO_TOOLCHAIN) go env GOROOT)/bin/gofmt
+GOFMT = $(shell GOTOOLCHAIN=$(GO_TOOLCHAIN) go env GOROOT)/bin/gofmt
 
 .PHONY: all
 all: check build ## Run the default verification and build workflow.
