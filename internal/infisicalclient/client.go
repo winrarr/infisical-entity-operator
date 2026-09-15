@@ -19,6 +19,7 @@ package infisicalclient
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,6 +56,44 @@ func (e *HTTPError) Error() string {
 func IsNotFound(err error) bool {
 	var httpErr *HTTPError
 	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
+}
+
+// IsUnauthorized reports whether err is an authentication or authorization response.
+func IsUnauthorized(err error) bool {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	return httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden
+}
+
+// InvalidResponseError reports a successful response that does not satisfy the client's contract.
+type InvalidResponseError struct {
+	Message string
+}
+
+func (e *InvalidResponseError) Error() string { return e.Message }
+
+// TokenIdentityID returns the machine identity ID in a JWT access token. It returns an
+// empty string for user tokens, API keys, and tokens without the standard identityId claim.
+// The value is only used as an API resource identifier; Infisical still authorizes every
+// request using the original token.
+func (c *Client) TokenIdentityID() string {
+	parts := strings.Split(c.token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	claims, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var payload struct {
+		IdentityID string `json:"identityId"`
+	}
+	if err := json.Unmarshal(claims, &payload); err != nil {
+		return ""
+	}
+	return payload.IdentityID
 }
 
 // New validates an Infisical API URL and returns a client using the supplied token.

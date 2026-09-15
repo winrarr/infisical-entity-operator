@@ -15,14 +15,17 @@ This project has both local controller tests and a disposable live environment. 
 | `make docs-build` | The generated API reference and Zensical site build succeed with strict link validation. |
 | `make check` | The complete local static suite: generation, formatting, vet, tests, lint, Helm lint, and documentation build. |
 | `make build` | The controller binary can be built from the current source and generated artifacts. |
-| `make kind-e2e` | The disposable Kind cluster can run Cilium, Infisical, the chart, the operator, the egress policy, and the live reconciliation path. |
+| `make kind-e2e` | The disposable Kind cluster can run Cilium, Infisical, the chart, the operator, the egress policy, and the live single-organization reconciliation path. |
+| `make kind-vcluster-e2e` | A core operator creates an Infisical organization and machine identity, then an operator inside a vCluster adopts that organization and creates a project with the tenant credential. |
+| `make kind-capsule-e2e` | One cluster-wide operator reconciles two Capsule tenants with separate organization credentials while Kyverno rejects a cross-tenant organization reference. |
+| `make kind-multitenancy-e2e` | Runs both tenant-boundary scenarios in sequence. |
 | `make kind-down` | Only the named disposable Kind cluster is removed. |
 
 CI uses the same repository commands: the test workflow checks generated output and runs `make test`, the lint workflow runs `make lint-config lint helm-lint`, the docs workflow runs `make docs-build` and deploys the result from `main`, and the e2e workflow runs `make kind-e2e` followed by cleanup.
 
 ## kstatus compatibility
 
-All six CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
+All seven CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
 
 See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md) for the external interpretation.
 
@@ -30,7 +33,7 @@ See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-u
 
 Unit and HTTP contract tests use fake Kubernetes clients and `httptest` servers. They prove request construction, response decoding, dependency handling, status transitions, drift correction, finalizers, and error classification without requiring a live Infisical account.
 
-The Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, the Cilium egress policy, and live project, environment, identity, and built-in `no-access` identity-membership reconciliation. The default standalone Infisical chart can reject custom project roles because of its plan and can reject the cluster-local Kubernetes review URL because of its URL policy. The script records those exact known conditions and continues; it does not claim successful custom `InfisicalProjectRole` creation or Kubernetes Auth login in that configuration. Successful custom-role and authentication flows require an Infisical endpoint whose plan and network policy permit them.
+The Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, the Cilium egress policy, and live project, environment, organization-scoped identity, and built-in `no-access` project-membership reconciliation. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference. The default standalone Infisical chart can reject custom project roles because of its plan and can reject the cluster-local Kubernetes review URL because of its URL policy. The script records those exact known conditions and continues; it does not claim successful custom `InfisicalProjectRole` creation or Kubernetes Auth login in that configuration.
 
 Kubernetes Auth allow/deny login checks run only when the live API accepts the configured review endpoint. The token-review JWT and CA data used by the test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
 

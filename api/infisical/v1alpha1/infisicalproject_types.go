@@ -21,6 +21,7 @@ import (
 )
 
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalProject"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef",message="organizationRef is immutable; delete and recreate the InfisicalProject"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.shouldCreateDefaultEnvs) || self.shouldCreateDefaultEnvs == oldSelf.shouldCreateDefaultEnvs",message="shouldCreateDefaultEnvs is immutable; delete and recreate the InfisicalProject"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.type) || self.type == oldSelf.type",message="type is immutable; delete and recreate the InfisicalProject"
 
@@ -28,6 +29,11 @@ import (
 type InfisicalProjectSpec struct {
 	// ConnectionRef selects the Infisical API connection.
 	ConnectionRef InfisicalConnectionReference `json:"connectionRef"`
+
+	// OrganizationRef optionally identifies the Infisical organization in which this project
+	// must be created or adopted. When set, the observed project organization must match it.
+	// +optional
+	OrganizationRef *LocalObjectReference `json:"organizationRef,omitempty"`
 
 	// ProjectName is the Infisical project name. If omitted, metadata.name is used.
 	// +optional

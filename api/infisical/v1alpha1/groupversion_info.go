@@ -40,6 +40,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(GroupVersion,
 		&InfisicalConnection{},
 		&InfisicalConnectionList{},
+		&InfisicalOrganization{},
+		&InfisicalOrganizationList{},
 		&InfisicalProject{},
 		&InfisicalProjectList{},
 		&InfisicalIdentity{},

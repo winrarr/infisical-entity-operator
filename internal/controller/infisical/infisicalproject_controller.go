@@ -18,6 +18,7 @@ package infisical
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,6 +41,7 @@ type InfisicalProjectReconciler struct {
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojects/finalizers,verbs=update
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalconnections,verbs=get;list;watch
+// +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalorganizations,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -62,6 +64,10 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.reconcileProjectDeletion(ctx, &project)
 	}
 	before := project.Status
+	expectedOrganizationID, err := r.expectedOrganizationID(ctx, &project)
+	if err != nil {
+		return r.projectError(ctx, &project, "OrganizationNotReady", err)
+	}
 
 	apiClient, err := infisicalClientForConnection(ctx, r.Client, project.Namespace, project.Spec.ConnectionRef)
 	if err != nil {
@@ -75,7 +81,12 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return r.projectError(ctx, &project, "ExternalReadFailed", findErr)
 			}
 			if adopted != nil {
+				if err := validateProjectOrganization(adopted, expectedOrganizationID); err != nil {
+					return r.projectError(ctx, &project, "ExternalProjectMismatch", err)
+				}
 				r.setProjectObservedState(&project, adopted)
+			} else if !canCreate(project.Spec.CreationPolicy) {
+				return r.projectError(ctx, &project, "RemoteProjectMissing", newDependencyError("the project was not found in Infisical and creationPolicy is Adopt"))
 			}
 		}
 	}
@@ -96,7 +107,14 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if createErr != nil {
 			return r.projectError(ctx, &project, "ExternalCreateFailed", createErr)
 		}
+		if err := validateProjectOrganization(created, expectedOrganizationID); err != nil {
+			r.setProjectObservedState(&project, created)
+			return r.projectError(ctx, &project, "ExternalProjectMismatch", err)
+		}
 		r.setProjectObservedState(&project, created)
+	}
+	if err := r.ensureProjectCreatorMembership(ctx, apiClient, &project); err != nil {
+		return r.projectError(ctx, &project, "ExternalMembershipFailed", err)
 	}
 
 	current, err := apiClient.GetProject(ctx, project.Status.ProjectID)
@@ -112,6 +130,9 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &project, before, project.Status)
 		}
 		return r.projectError(ctx, &project, "ExternalReadFailed", err)
+	}
+	if err := validateProjectOrganization(current, expectedOrganizationID); err != nil {
+		return r.projectError(ctx, &project, "ExternalProjectMismatch", err)
 	}
 
 	if projectNeedsUpdate(&project, current) {
@@ -132,11 +153,49 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &project, before, project.Status)
 }
 
+func (r *InfisicalProjectReconciler) ensureProjectCreatorMembership(ctx context.Context, apiClient *infisicalclient.Client, project *infisicalv1alpha1.InfisicalProject) error {
+	if project.Spec.OrganizationRef == nil || project.Status.ProjectID == "" {
+		return nil
+	}
+	identityID := apiClient.TokenIdentityID()
+	if identityID == "" {
+		return nil
+	}
+	if err := apiClient.EnsureIdentityProjectMembership(ctx, project.Status.ProjectID, identityID, []string{"admin"}); err != nil {
+		return fmt.Errorf("ensure creating identity %q has project admin access: %w", identityID, err)
+	}
+	return nil
+}
+
 func projectType(project *infisicalv1alpha1.InfisicalProject) infisicalv1alpha1.ProjectType {
 	if project.Spec.Type == "" {
 		return infisicalv1alpha1.ProjectTypeSecretManager
 	}
 	return project.Spec.Type
+}
+
+func (r *InfisicalProjectReconciler) expectedOrganizationID(ctx context.Context, project *infisicalv1alpha1.InfisicalProject) (string, error) {
+	if project.Spec.OrganizationRef == nil || project.Spec.OrganizationRef.Name == "" {
+		return "", nil
+	}
+	var organization infisicalv1alpha1.InfisicalOrganization
+	if err := r.Get(ctx, client.ObjectKey{Namespace: project.Namespace, Name: project.Spec.OrganizationRef.Name}, &organization); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", newDependencyError("InfisicalOrganization %s/%s was not found", project.Namespace, project.Spec.OrganizationRef.Name)
+		}
+		return "", err
+	}
+	if organization.Status.OrganizationID == "" {
+		return "", newDependencyError("InfisicalOrganization %s/%s has no observed Infisical organization ID", organization.Namespace, organization.Name)
+	}
+	return organization.Status.OrganizationID, nil
+}
+
+func validateProjectOrganization(project *infisicalclient.Project, expectedOrganizationID string) error {
+	if expectedOrganizationID != "" && project.OrganizationID != expectedOrganizationID {
+		return fmt.Errorf("infisical project belongs to organization %q, want %q", project.OrganizationID, expectedOrganizationID)
+	}
+	return nil
 }
 
 func projectNeedsUpdate(project *infisicalv1alpha1.InfisicalProject, current *infisicalclient.Project) bool {
@@ -191,6 +250,20 @@ func (r *InfisicalProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			for i := range projects.Items {
 				project := &projects.Items[i]
 				if project.Spec.ConnectionRef.Name == object.GetName() {
+					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)})
+				}
+			}
+			return requests
+		})).
+		Watches(&infisicalv1alpha1.InfisicalOrganization{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
+			var projects infisicalv1alpha1.InfisicalProjectList
+			if err := mgr.GetClient().List(ctx, &projects, client.InNamespace(object.GetNamespace())); err != nil {
+				return nil
+			}
+			requests := make([]ctrl.Request, 0)
+			for i := range projects.Items {
+				project := &projects.Items[i]
+				if project.Spec.OrganizationRef != nil && project.Spec.OrganizationRef.Name == object.GetName() {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)})
 				}
 			}

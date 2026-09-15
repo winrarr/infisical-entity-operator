@@ -90,24 +90,24 @@ A transient conflict can leave status stale for longer than the normal reconcili
 
 Use a conflict-safe status patch or targeted retry against the latest resource version, add a focused test for a concurrent status/spec update, and show that external side effects remain idempotent.
 
-## TD-005: Evaluate multi-tenant isolation before making a support claim
+## TD-005: Cluster-wide manager remains a trusted deployment
 
-Status: deferred evaluation
+Status: accepted limitation
 
 ### Evidence
 
-Resources, ownership references, and credential references are namespaced and same-namespace by design, but the default manager watches cluster-wide and its ClusterRole can read Secrets across namespaces. Infisical organization/project boundaries and Cilium policy boundaries are not yet evaluated as a combined tenant model.
+Resources, ownership references, and credential references are namespaced and same-namespace by design. The accepted tenant-boundary model uses one Infisical organization per tenant and organization-scoped machine identities with project memberships, but the default manager still watches cluster-wide and its ClusterRole can read Secrets across namespaces. That deployment is therefore suitable for a trusted platform team, not mutually untrusted tenant workloads.
 
 ### Impact
 
-The project can provide a useful single-tenant or trusted-cluster installation, but it must not claim tenant isolation. A deployment that shares one manager across mutually untrusted tenants could expose a wider blast radius than the resource API suggests.
+The project can provide a useful single-tenant or trusted-cluster installation, but it must not claim tenant isolation for the shared manager. A deployment that shares one manager across mutually untrusted tenants could expose a wider blast radius than the resource API suggests.
 
 ### Constraints
 
 - Do not add cross-namespace references or shared credentials as a shortcut.
-- Evaluate Kubernetes RBAC, caches, watches, status, logs, events, metrics, network policy, and Infisical authorization together.
-- Preserve the current single-tenant installation path while the evaluation is pending.
+- Keep Kubernetes RBAC, caches, watches, status, logs, events, metrics, network policy, and Infisical authorization as separate controls.
+- Preserve the current trusted-cluster installation path and document the per-tenant deployment boundary.
 
 ### Exit criteria
 
-Complete [BL-006](backlog.md#bl-006-evaluate-and-harden-multi-tenancy) with a documented support model, threat assumptions, comparison of cluster-wide and namespace-scoped deployments, isolation tests, and either required implementation changes or an explicit deferral decision.
+Add and verify a deployment mode with an independently isolated manager cache and Secret permission set, or retain the trusted-cluster limitation with an explicit product decision not to claim shared-cluster tenant isolation.

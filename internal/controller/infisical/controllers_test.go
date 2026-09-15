@@ -18,6 +18,7 @@ package infisical
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,18 +38,26 @@ import (
 )
 
 const (
-	testNamespace        = "default"
-	testProject          = "demo"
-	testProjectID        = "project-1"
-	testConnection       = "infisical"
-	testTokenKey         = "token"
-	testWorkload         = "workload"
-	testIdentityID       = "identity-1"
-	testIdentityPath     = "/api/v1/projects/project-1/identities"
-	testIdentityByIDPath = "/api/v1/projects/project-1/identities/identity-1"
-	testMembershipPath   = "/api/v1/projects/project-1/memberships/identities/identity-1"
-	testCustomReaderRole = "custom-reader"
-	testMemberRole       = "member"
+	testNamespace                    = "default"
+	testProject                      = "demo"
+	testProjectID                    = "project-1"
+	testConnection                   = "infisical"
+	testTokenKey                     = "token"
+	testWorkload                     = "workload"
+	testIdentityID                   = "identity-1"
+	testOrganizationID               = "org-1"
+	testSecondProjectID              = "project-2"
+	testIdentityPath                 = "/api/v1/projects/project-1/identities"
+	testIdentityByIDPath             = "/api/v1/projects/project-1/identities/identity-1"
+	testMembershipPath               = "/api/v1/projects/project-1/memberships/identities/identity-1"
+	testOrganizationIdentityPath     = "/api/v1/identities"
+	testOrganizationIdentityByIDPath = "/api/v1/identities/identity-1"
+	testSecondMembershipPath         = "/api/v1/projects/project-2/memberships/identities/identity-1"
+	testCustomReaderRole             = "custom-reader"
+	testMemberRole                   = "member"
+	testProjectsPath                 = "/api/v1/projects"
+	testProjectByIDPath              = "/api/v1/projects/project-1"
+	testTenantOrganizationName       = "tenant-org"
 )
 
 type infisicalMembershipRequest struct {
@@ -72,6 +81,7 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 		WithObjects(objects...).
 		WithStatusSubresource(
 			&infisicalv1alpha1.InfisicalConnection{},
+			&infisicalv1alpha1.InfisicalOrganization{},
 			&infisicalv1alpha1.InfisicalProject{},
 			&infisicalv1alpha1.InfisicalIdentity{},
 			&infisicalv1alpha1.InfisicalEnvironment{},
@@ -79,6 +89,10 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 			&infisicalv1alpha1.InfisicalProjectRole{},
 		).
 		Build()
+}
+
+func identityProjectRef(name string) *infisicalv1alpha1.LocalObjectReference {
+	return &infisicalv1alpha1.LocalObjectReference{Name: name}
 }
 
 func connectionAndSecret(serverURL string) (*infisicalv1alpha1.InfisicalConnection, *corev1.Secret) {
@@ -99,7 +113,7 @@ func connectionAndSecret(serverURL string) (*infisicalv1alpha1.InfisicalConnecti
 
 func TestConnectionReconcilerReportsReachability(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/api/v1/projects" || request.Header.Get("Authorization") != "Bearer test-token" {
+		if request.URL.Path != testProjectsPath || request.Header.Get("Authorization") != "Bearer test-token" {
 			http.Error(writer, "unexpected request", http.StatusBadRequest)
 			return
 		}
@@ -125,15 +139,95 @@ func TestConnectionReconcilerReportsReachability(t *testing.T) {
 	}
 }
 
+func TestOrganizationReconcilerCreatesOrganization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v2/organizations":
+			_, _ = writer.Write([]byte(`{"organization":{"id":"org-1","name":"tenant-org","slug":"tenant-org"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/organization/org-1":
+			_, _ = writer.Write([]byte(`{"organization":{"id":"org-1","name":"tenant-org","slug":"tenant-org"}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantOrganizationName, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalOrganizationSpec{
+			ConnectionRef:    infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationName: testTenantOrganizationName,
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization)
+	reconciler := &InfisicalOrganizationReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(organization)}); err != nil {
+		t.Fatalf("reconcile organization: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalOrganization
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(organization), &observed); err != nil {
+		t.Fatalf("get organization: %v", err)
+	}
+	if observed.Status.OrganizationID != testOrganizationID || observed.Status.OrganizationName != testTenantOrganizationName || observed.Status.Slug != testTenantOrganizationName {
+		t.Fatalf("unexpected organization status: %#v", observed.Status)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestOrganizationReconcilerAdoptsWithMachineIdentityProjectVisibility(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/organization/org-1":
+			http.Error(writer, "user JWT required", http.StatusForbidden)
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects":
+			_, _ = writer.Write([]byte(`{"projects":[{"id":"project-1","name":"anchor","orgId":"org-1"}]}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantOrganizationName, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalOrganizationSpec{
+			ConnectionRef:  infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationID: testOrganizationID,
+			CreationPolicy: infisicalv1alpha1.CreationPolicyAdopt,
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization)
+	reconciler := &InfisicalOrganizationReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(organization)}); err != nil {
+		t.Fatalf("reconcile adopted organization: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalOrganization
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(organization), &observed); err != nil {
+		t.Fatalf("get organization: %v", err)
+	}
+	if observed.Status.OrganizationID != testOrganizationID || len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("unexpected adopted organization status: %#v", observed.Status)
+	}
+}
+
 func TestProjectReconcilerCreatesAndUpdatesProject(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch {
-		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects":
+		case request.Method == http.MethodPost && request.URL.Path == testProjectsPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","environments":[]}}`))
-		case request.Method == http.MethodPatch && request.URL.Path == "/api/v1/projects/project-1":
+		case request.Method == http.MethodPatch && request.URL.Path == testProjectByIDPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","description":"updated","environments":[{"id":"env-1","name":"Production","slug":"prod"}]}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1":
+		case request.Method == http.MethodGet && request.URL.Path == testProjectByIDPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","environments":[{"id":"env-1","name":"Production","slug":"prod"}]}}`))
 		default:
 			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
@@ -212,6 +306,66 @@ func TestProjectReconcilerAddsDeleteFinalizer(t *testing.T) {
 	}
 }
 
+func TestProjectReconcilerGrantsCreatorAccessForOrganizationProject(t *testing.T) {
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"identityId":"identity-1"}`))
+	token := "header." + claims + ".signature"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testProjectsPath:
+			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo","orgId":"org-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/memberships/identities/identity-1":
+			http.Error(writer, "membership not found", http.StatusNotFound)
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/memberships/identities/identity-1":
+			var body infisicalMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode membership request: %v", err)
+			}
+			if len(body.Roles) != 1 || body.Roles[0].Role != "admin" || body.Roles[0].IsTemporary {
+				t.Errorf("unexpected membership request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1":
+			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo","orgId":"org-1","environments":[]}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	secret.Data[testTokenKey] = []byte(token)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: "tenant-boundary", Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalOrganizationStatus{OrganizationID: testOrganizationID},
+	}
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalProjectSpec{
+			ConnectionRef:   infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationRef: &infisicalv1alpha1.LocalObjectReference{Name: organization.Name},
+			ProjectName:     testProject,
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization, project)
+	reconciler := &InfisicalProjectReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)}); err != nil {
+		t.Fatalf("reconcile organization project: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalProject
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(project), &observed); err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if observed.Status.ProjectID != testProjectID || observed.Status.OrganizationID != testOrganizationID {
+		t.Fatalf("unexpected organization project status: %#v", observed.Status)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
 func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -235,7 +389,7 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 		},
 	}
 	kubeClient := testClient(t, connection, secret, project, identity)
@@ -261,6 +415,96 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	}
 	if len(observed.Finalizers) != 0 {
 		t.Fatalf("expected no finalizer for default orphan policy, got %#v", observed.Finalizers)
+	}
+}
+
+func TestIdentityReconcilerCreatesOrganizationIdentityAndProjectMembership(t *testing.T) {
+	membershipReads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testOrganizationIdentityPath:
+			var body struct {
+				Name           string `json:"name"`
+				OrganizationID string `json:"organizationId"`
+				Role           string `json:"role"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode organization identity request: %v", err)
+			}
+			if body.Name != testWorkload || body.OrganizationID != testOrganizationID || body.Role != "no-access" {
+				t.Errorf("unexpected organization identity request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"workload","orgId":"org-1","role":"no-access"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testOrganizationIdentityByIDPath:
+			_, _ = writer.Write([]byte(`{"identity":{"id":"membership-1","identityId":"identity-1","orgId":"org-1","role":"no-access","identity":{"id":"identity-1","name":"workload","orgId":"org-1","hasDeleteProtection":false}}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testSecondMembershipPath:
+			membershipReads++
+			if membershipReads == 1 {
+				http.Error(writer, "membership not found", http.StatusNotFound)
+				return
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-2","projectId":"project-2","identityId":"identity-1","roles":[{"id":"assignment-1","role":"member","isTemporary":false}]}}`))
+		case request.Method == http.MethodPost && request.URL.Path == testSecondMembershipPath:
+			var body infisicalMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode organization membership request: %v", err)
+			}
+			if len(body.Roles) != 1 || body.Roles[0].Role != testMemberRole || body.Roles[0].IsTemporary {
+				t.Errorf("unexpected organization membership request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-2","projectId":"project-2","identityId":"identity-1"}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantOrganizationName, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalOrganizationStatus{OrganizationID: testOrganizationID},
+	}
+	boundProject := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: "secondary", Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testSecondProjectID, OrganizationID: testOrganizationID},
+	}
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			Scope:         infisicalv1alpha1.IdentityScopeOrganization,
+			OrganizationRef: &infisicalv1alpha1.LocalObjectReference{
+				Name: organization.Name,
+			},
+			ProjectRoleBindings: []infisicalv1alpha1.IdentityProjectRoleBinding{{
+				ProjectRef: infisicalv1alpha1.LocalObjectReference{Name: boundProject.Name},
+				RoleSlugs:  []string{testMemberRole},
+			}},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization, boundProject, identity)
+	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {
+		t.Fatalf("reconcile organization identity: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentity
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
+		t.Fatalf("get organization identity: %v", err)
+	}
+	if observed.Status.IdentityID != testIdentityID || observed.Status.OrganizationID != testOrganizationID || observed.Status.OrganizationRole != "no-access" {
+		t.Fatalf("unexpected organization identity status: %#v", observed.Status)
+	}
+	if len(observed.Status.ProjectMemberships) != 1 || observed.Status.ProjectMemberships[0].ProjectID != testSecondProjectID || observed.Status.ProjectMemberships[0].MembershipID != "membership-2" {
+		t.Fatalf("unexpected organization project membership status: %#v", observed.Status.ProjectMemberships)
+	}
+	if len(observed.Status.ProjectMemberships[0].Roles) != 1 || observed.Status.ProjectMemberships[0].Roles[0].Slug != testMemberRole {
+		t.Fatalf("unexpected organization role status: %#v", observed.Status.ProjectMemberships[0].Roles)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
 }
 
@@ -304,7 +548,7 @@ func TestIdentityReconcilerCreatesPermanentRoleMembership(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testMemberRole, testCustomReaderRole},
 		},
 	}
@@ -355,7 +599,7 @@ func TestIdentityReconcilerAdoptsIdentityAndRoleMembership(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef:  infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:     infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:     identityProjectRef(project.Name),
 			CreationPolicy: infisicalv1alpha1.CreationPolicyCreateOrAdopt,
 			RoleSlugs:      []string{testMemberRole},
 		},
@@ -385,7 +629,7 @@ func TestIdentityReconcilerWaitsForProjectStatus(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testMemberRole},
 		},
 	}
@@ -472,7 +716,7 @@ func TestIdentityReconcilerCorrectsRoleMembershipDrift(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testCustomReaderRole},
 		},
 		Status: infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},
@@ -519,7 +763,7 @@ func TestIdentityReconcilerReportsRoleMembershipError(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkload, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalIdentitySpec{
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
-			ProjectRef:    infisicalv1alpha1.LocalObjectReference{Name: project.Name},
+			ProjectRef:    identityProjectRef(project.Name),
 			RoleSlugs:     []string{testCustomReaderRole},
 		},
 		Status: infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, ProjectID: testProjectID},

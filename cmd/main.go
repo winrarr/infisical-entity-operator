@@ -172,6 +172,13 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "InfisicalConnection")
 		os.Exit(1)
 	}
+	if err := (&infisicalcontroller.InfisicalOrganizationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "InfisicalOrganization")
+		os.Exit(1)
+	}
 	if err := (&infisicalcontroller.InfisicalProjectReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

@@ -18,10 +18,20 @@ package infisicalclient
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+)
+
+const (
+	testOrganizationID           = "org-1"
+	testOrganizationMemberRole   = "member"
+	testOrganizationIdentityPath = "/api/v1/identities/identity-1"
+	testOrganizationByIDPath     = "/api/v1/organization/org-1"
+	testTenantName               = "tenant"
 )
 
 func TestClientUsesAPIPathAndBearerToken(t *testing.T) {
@@ -70,5 +80,237 @@ func TestNewRejectsInvalidURLAndEmptyToken(t *testing.T) {
 	}
 	if _, err := New("https://app.infisical.com/api", "", time.Second); err == nil {
 		t.Fatal("expected empty token error")
+	}
+}
+
+func TestOrganizationClientUsesOrganizationEndpoints(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v2/organizations":
+			requests++
+			_, _ = writer.Write([]byte(`{"organization":{"id":"org-1","name":"tenant","slug":"tenant"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testOrganizationByIDPath:
+			requests++
+			_, _ = writer.Write([]byte(`{"organization":{"id":"org-1","name":"tenant","slug":"tenant"}}`))
+		case request.Method == http.MethodDelete && request.URL.Path == "/api/v2/organizations/org-1":
+			requests++
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	created, err := client.CreateOrganization(context.Background(), CreateOrganizationRequest{Name: testTenantName})
+	if err != nil || created.ID != testOrganizationID {
+		t.Fatalf("create organization: %#v, %v", created, err)
+	}
+	found, err := client.GetOrganization(context.Background(), testOrganizationID)
+	if err != nil || found.Slug != testTenantName {
+		t.Fatalf("get organization: %#v, %v", found, err)
+	}
+	if err := client.DeleteOrganization(context.Background(), testOrganizationID); err != nil {
+		t.Fatalf("delete organization: %v", err)
+	}
+	if requests != 3 {
+		t.Fatalf("expected three organization requests, got %d", requests)
+	}
+}
+
+func TestFindOrganizationUsesMachineIdentityWorkspaceAccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodGet && request.URL.Path == testOrganizationByIDPath {
+			http.Error(writer, "user JWT required", http.StatusForbidden)
+			return
+		}
+		if request.Method == http.MethodGet && request.URL.Path == "/api/v2/organizations/org-1/memberships" {
+			_, _ = writer.Write([]byte(`{"users":[]}`))
+			return
+		}
+		if request.Method == http.MethodGet && request.URL.Path == "/api/v2/organizations/org-1/workspaces" {
+			_, _ = writer.Write([]byte(`{"workspaces":[]}`))
+			return
+		}
+		http.Error(writer, "unexpected request", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	organization, err := client.FindOrganization(context.Background(), testOrganizationID, "")
+	if err != nil || organization == nil || organization.ID != testOrganizationID {
+		t.Fatalf("find organization from workspaces: %#v, %v", organization, err)
+	}
+}
+
+func TestFindOrganizationFallsBackToVisibleProjects(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodGet && request.URL.Path == testOrganizationByIDPath {
+			http.Error(writer, "user JWT required", http.StatusForbidden)
+			return
+		}
+		if request.Method == http.MethodGet && request.URL.Path == "/api/v2/organizations/org-1/memberships" {
+			http.Error(writer, "organization membership endpoint unavailable", http.StatusNotFound)
+			return
+		}
+		if request.Method == http.MethodGet && request.URL.Path == "/api/v2/organizations/org-1/workspaces" {
+			http.Error(writer, "workspace endpoint unavailable", http.StatusNotFound)
+			return
+		}
+		if request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects" {
+			_, _ = writer.Write([]byte(`{"projects":[{"id":"project-1","orgId":"org-1"}]}`))
+			return
+		}
+		http.Error(writer, "unexpected request", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	organization, err := client.FindOrganization(context.Background(), testOrganizationID, "")
+	if err != nil || organization == nil || organization.ID != testOrganizationID {
+		t.Fatalf("find organization from projects: %#v, %v", organization, err)
+	}
+}
+
+func TestTokenIdentityIDReadsMachineIdentityClaim(t *testing.T) {
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"identityId":"identity-1"}`))
+	client, err := New("https://infisical.example", "header."+claims+".signature", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if got := client.TokenIdentityID(); got != "identity-1" {
+		t.Fatalf("expected identity ID, got %q", got)
+	}
+
+	apiKeyClient, err := New("https://infisical.example", "api-key", time.Second)
+	if err != nil {
+		t.Fatalf("new API key client: %v", err)
+	}
+	if got := apiKeyClient.TokenIdentityID(); got != "" {
+		t.Fatalf("expected no identity ID for API key, got %q", got)
+	}
+}
+
+func TestEnsureIdentityProjectMembership(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/memberships/identities/identity-1" {
+			requests++
+			http.Error(writer, "membership not found", http.StatusNotFound)
+			return
+		}
+		if request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/memberships/identities/identity-1" {
+			requests++
+			var body IdentityMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode membership request: %v", err)
+			}
+			if len(body.Roles) != 1 || body.Roles[0].Role != "admin" || body.Roles[0].IsTemporary {
+				t.Errorf("unexpected membership request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1"}}`))
+			return
+		}
+		http.Error(writer, "unexpected request", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if err := client.EnsureIdentityProjectMembership(context.Background(), "project-1", "identity-1", []string{"admin"}); err != nil {
+		t.Fatalf("ensure membership: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("expected membership read and create, got %d requests", requests)
+	}
+}
+
+func TestOrganizationIdentityClientUsesOrganizationEndpoints(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/identities":
+			requests++
+			var body CreateOrganizationIdentityRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode organization identity request: %v", err)
+			}
+			if body.OrganizationID != testOrganizationID || body.Role != testOrganizationMemberRole {
+				t.Errorf("unexpected organization identity request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identity":{"id":"identity-1","name":"tenant","orgId":"org-1","role":"member"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/identities":
+			requests++
+			if request.URL.Query().Get("orgId") != testOrganizationID {
+				t.Errorf("unexpected organization query: %s", request.URL.RawQuery)
+			}
+			_, _ = writer.Write([]byte(`{"identities":[{"id":"membership-1","identityId":"identity-1","role":"no-access","orgId":"org-1","identity":{"id":"identity-1","name":"tenant","orgId":"org-1","hasDeleteProtection":false}}]}`))
+		case request.Method == http.MethodGet && request.URL.Path == testOrganizationIdentityPath:
+			requests++
+			_, _ = writer.Write([]byte(`{"identity":{"id":"membership-1","identityId":"identity-1","orgId":"org-1","role":"no-access","identity":{"id":"identity-1","name":"tenant","orgId":"org-1","hasDeleteProtection":false}}}`))
+		case request.Method == http.MethodPatch && request.URL.Path == testOrganizationIdentityPath:
+			requests++
+			_, _ = writer.Write([]byte(`{"identity":{"id":"membership-1","identityId":"identity-1","orgId":"org-1","role":"member","identity":{"id":"identity-1","name":"tenant-renamed","orgId":"org-1","hasDeleteProtection":false}}}`))
+		case request.Method == http.MethodDelete && request.URL.Path == testOrganizationIdentityPath:
+			requests++
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	created, err := client.CreateOrganizationIdentity(context.Background(), testOrganizationID, CreateOrganizationIdentityRequest{Name: testTenantName, Role: testOrganizationMemberRole})
+	if err != nil {
+		t.Fatalf("create organization identity: %v", err)
+	}
+	if created.OrganizationID != testOrganizationID || created.OrganizationRole != testOrganizationMemberRole {
+		t.Fatalf("unexpected created identity: %#v", created)
+	}
+	found, err := client.FindOrganizationIdentity(context.Background(), testOrganizationID, testTenantName)
+	if err != nil {
+		t.Fatalf("find organization identity: %v", err)
+	}
+	if found == nil || found.ID != "identity-1" || found.OrganizationRole != "no-access" {
+		t.Fatalf("unexpected found identity: %#v", found)
+	}
+	observed, err := client.GetOrganizationIdentity(context.Background(), "identity-1")
+	if err != nil {
+		t.Fatalf("get organization identity: %v", err)
+	}
+	if observed.OrganizationID != testOrganizationID {
+		t.Fatalf("unexpected observed identity: %#v", observed)
+	}
+	updated, err := client.UpdateOrganizationIdentity(context.Background(), "identity-1", IdentityPatch{Name: "tenant-renamed"})
+	if err != nil {
+		t.Fatalf("update organization identity: %v", err)
+	}
+	if updated.Name != "tenant-renamed" {
+		t.Fatalf("unexpected updated identity: %#v", updated)
+	}
+	if err := client.DeleteOrganizationIdentity(context.Background(), "identity-1"); err != nil {
+		t.Fatalf("delete organization identity: %v", err)
+	}
+	if requests != 5 {
+		t.Fatalf("expected five organization identity requests, got %d", requests)
 	}
 }

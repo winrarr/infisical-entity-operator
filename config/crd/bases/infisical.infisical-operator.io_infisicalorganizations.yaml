@@ -4,20 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: infisicalprojects.infisical.infisical-operator.io
+  name: infisicalorganizations.infisical.infisical-operator.io
 spec:
   group: infisical.infisical-operator.io
   names:
-    kind: InfisicalProject
-    listKind: InfisicalProjectList
-    plural: infisicalprojects
-    singular: infisicalproject
+    kind: InfisicalOrganization
+    listKind: InfisicalOrganizationList
+    plural: infisicalorganizations
+    singular: infisicalorganization
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: InfisicalProject is the Schema for the infisicalprojects API
+        description: InfisicalOrganization is the Schema for the infisicalorganizations
+          API.
         properties:
           apiVersion:
             description: |-
@@ -37,10 +38,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of InfisicalProject
+            description: Spec defines the desired state of InfisicalOrganization.
             properties:
               connectionRef:
-                description: ConnectionRef selects the Infisical API connection.
+                description: |-
+                  ConnectionRef selects the Infisical API connection used for organization lifecycle.
+                  Creating or deleting an organization requires a user JWT or API key; machine identity
+                  tokens can adopt an explicit organization after the platform has provisioned it.
                 properties:
                   name:
                     description: Name is the InfisicalConnection name.
@@ -52,7 +56,7 @@ spec:
               creationPolicy:
                 default: Create
                 description: CreationPolicy controls whether the operator creates
-                  or adopts a project.
+                  or adopts an organization.
                 enum:
                 - Create
                 - Adopt
@@ -60,82 +64,42 @@ spec:
                 type: string
               deletionPolicy:
                 default: Orphan
-                description: DeletionPolicy controls whether the external project
+                description: DeletionPolicy controls whether the external organization
                   is deleted with this resource.
                 enum:
                 - Delete
                 - Orphan
                 type: string
-              description:
-                description: Description is an optional project description.
-                maxLength: 1024
-                type: string
-              hasDeleteProtection:
-                default: false
-                description: HasDeleteProtection configures Infisical-side delete
-                  protection.
-                type: boolean
-              organizationRef:
+              organizationID:
                 description: |-
-                  OrganizationRef optionally identifies the Infisical organization in which this project
-                  must be created or adopted. When set, the observed project organization must match it.
-                properties:
-                  name:
-                    description: Name is the referenced resource name.
-                    minLength: 1
-                    type: string
-                required:
-                - name
-                type: object
-              projectName:
-                description: ProjectName is the Infisical project name. If omitted,
-                  metadata.name is used.
-                maxLength: 64
+                  OrganizationID identifies an existing organization to adopt. It is also the explicit
+                  boundary used by tenant operators, which may not be able to call Infisical's user-only
+                  organization lookup endpoint.
                 minLength: 1
                 type: string
-              shouldCreateDefaultEnvs:
-                default: true
+              organizationName:
                 description: |-
-                  ShouldCreateDefaultEnvs controls whether Infisical creates its default environments.
-                  It is only used during project creation.
-                type: boolean
-              slug:
-                description: Slug is an optional unique project slug.
+                  OrganizationName is the Infisical display name. If omitted, metadata.name is used.
+                  It is required when creating an organization and is used for name-based adoption.
                 maxLength: 64
-                minLength: 5
-                type: string
-              type:
-                default: secret-manager
-                description: Type selects the Infisical product type.
-                enum:
-                - secret-manager
-                - cert-manager
-                - kms
-                - ssh
-                - secret-scanning
-                - pam
-                - ai
+                minLength: 1
                 type: string
             required:
             - connectionRef
             type: object
             x-kubernetes-validations:
-            - message: connectionRef is immutable; delete and recreate the InfisicalProject
+            - message: connectionRef is immutable; delete and recreate the InfisicalOrganization
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
-            - message: organizationRef is immutable; delete and recreate the InfisicalProject
-              rule: '!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef'
-            - message: shouldCreateDefaultEnvs is immutable; delete and recreate the
-                InfisicalProject
-              rule: '!has(oldSelf.shouldCreateDefaultEnvs) || self.shouldCreateDefaultEnvs
-                == oldSelf.shouldCreateDefaultEnvs'
-            - message: type is immutable; delete and recreate the InfisicalProject
-              rule: '!has(oldSelf.type) || self.type == oldSelf.type'
+            - message: organizationID is immutable; delete and recreate the InfisicalOrganization
+              rule: '!has(oldSelf.organizationID) || self.organizationID == oldSelf.organizationID'
+            - message: organizationName is immutable; delete and recreate the InfisicalOrganization
+              rule: '!has(oldSelf.organizationName) || self.organizationName == oldSelf.organizationName'
           status:
-            description: status defines the observed state of InfisicalProject
+            description: Status defines the observed state of InfisicalOrganization.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the project.
+                  of the organization.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -194,43 +158,20 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              environments:
-                description: Environments contains the environments returned by Infisical.
-                items:
-                  description: EnvironmentStatus describes an Infisical project environment.
-                  properties:
-                    id:
-                      description: ID is the Infisical environment identifier.
-                      type: string
-                    name:
-                      description: Name is the display name.
-                      type: string
-                    slug:
-                      description: Slug is the stable environment slug.
-                      type: string
-                  required:
-                  - id
-                  - name
-                  - slug
-                  type: object
-                type: array
-                x-kubernetes-list-map-keys:
-                - id
-                x-kubernetes-list-type: map
               observedGeneration:
                 description: ObservedGeneration is the most recent generation reflected
                   in status.
                 format: int64
                 type: integer
               organizationID:
-                description: OrganizationID is the organization that owns the project.
+                description: OrganizationID is the immutable Infisical identifier
+                  once created or adopted.
                 type: string
-              projectID:
-                description: ProjectID is the immutable Infisical identifier once
-                  created or adopted.
+              organizationName:
+                description: OrganizationName is the observed Infisical display name.
                 type: string
               slug:
-                description: Slug is the observed Infisical project slug.
+                description: Slug is the observed Infisical organization slug.
                 type: string
             type: object
         required:

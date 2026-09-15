@@ -2,6 +2,8 @@
 
 `InfisicalProject` manages an Infisical project and is the parent for environments, roles, and identities.
 
+When a project belongs to a tenant boundary, set `spec.organizationRef` to a ready `InfisicalOrganization`. This is optional for existing single-organization installations and immutable when set.
+
 ```yaml
 apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalProject
@@ -10,6 +12,8 @@ metadata:
 spec:
   connectionRef:
     name: infisical
+  organizationRef:
+    name: payments-boundary
   projectName: payments
   slug: payments-platform
   shouldCreateDefaultEnvs: true

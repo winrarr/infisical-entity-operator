@@ -24,8 +24,13 @@ INFISICAL_IMAGE_TAG ?= v0.165.8
 CILIUM_VERSION ?= 1.20.1
 GO_TOOLCHAIN ?= go1.27.1
 KIND_VERSION ?= v0.33.0
+VCLUSTER_VERSION ?= 0.37.1
+CAPSULE_VERSION ?= 0.14.5
+KYVERNO_VERSION ?= 3.9.1
+CERT_MANAGER_VERSION ?= 1.21.1
 
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
+VCLUSTER ?= $(LOCALBIN)/vcluster
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
@@ -254,6 +259,34 @@ kind-refresh: docker-build kind-load-image deploy kind-restart ## Build, load, a
 .PHONY: kind-e2e
 kind-e2e: kind-deploy kind-restart ## Run the live Infisical reconciliation and network-policy test.
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" ./hack/e2e-kind.sh
+
+.PHONY: vcluster
+vcluster: ## Download the pinned vCluster CLI used by the virtual-cluster integration test.
+	@mkdir -p "$(LOCALBIN)"
+	@if ! test -x "$(VCLUSTER)" || ! "$(VCLUSTER)" --version 2>/dev/null | grep -Fq "vcluster version $(VCLUSTER_VERSION)"; then \
+		arch="$$(uname -m)"; \
+		case "$$arch" in \
+			x86_64) asset=vcluster-linux-amd64 ;; \
+			aarch64|arm64) asset=vcluster-linux-arm64 ;; \
+			*) echo "Unsupported architecture for vCluster CLI: $$arch" >&2; exit 1 ;; \
+		esac; \
+		curl -fsSL "https://github.com/loft-sh/vcluster/releases/download/v$(VCLUSTER_VERSION)/$$asset" -o "$(VCLUSTER).tmp"; \
+		chmod 0755 "$(VCLUSTER).tmp"; \
+		mv "$(VCLUSTER).tmp" "$(VCLUSTER)"; \
+	fi
+
+.PHONY: kind-vcluster-e2e
+kind-vcluster-e2e: kind-deploy kind-restart vcluster ## Run the vCluster plus tenant-operator integration test.
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" VCLUSTER="$(VCLUSTER)" VCLUSTER_VERSION="$(VCLUSTER_VERSION)" ./hack/e2e-kind-vcluster.sh
+
+.PHONY: kind-capsule-e2e
+kind-capsule-e2e: kind-deploy kind-restart ## Run the Capsule, single-operator, and Kyverno boundary test.
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" CAPSULE_VERSION="$(CAPSULE_VERSION)" KYVERNO_VERSION="$(KYVERNO_VERSION)" CERT_MANAGER_VERSION="$(CERT_MANAGER_VERSION)" ./hack/e2e-kind-capsule.sh
+
+.PHONY: kind-multitenancy-e2e
+kind-multitenancy-e2e: kind-deploy kind-restart vcluster ## Run both supported local multi-tenancy integration scenarios.
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" VCLUSTER="$(VCLUSTER)" VCLUSTER_VERSION="$(VCLUSTER_VERSION)" ./hack/e2e-kind-vcluster.sh
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" CAPSULE_VERSION="$(CAPSULE_VERSION)" KYVERNO_VERSION="$(KYVERNO_VERSION)" CERT_MANAGER_VERSION="$(CERT_MANAGER_VERSION)" ./hack/e2e-kind-capsule.sh
 
 .PHONY: kind-restart
 kind-restart: ## Restart the operator after loading a mutable local image tag.

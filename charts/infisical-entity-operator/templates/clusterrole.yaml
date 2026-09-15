@@ -19,6 +19,7 @@ rules:
   - infisicalenvironments
   - infisicalidentities
   - infisicalkubernetesauths
+  - infisicalorganizations
   - infisicalprojectroles
   - infisicalprojects
   verbs:
@@ -36,6 +37,7 @@ rules:
   - infisicalenvironments/status
   - infisicalidentities/status
   - infisicalkubernetesauths/status
+  - infisicalorganizations/status
   - infisicalprojectroles/status
   - infisicalprojects/status
   verbs:
@@ -48,6 +50,7 @@ rules:
   - infisicalenvironments/finalizers
   - infisicalidentities/finalizers
   - infisicalkubernetesauths/finalizers
+  - infisicalorganizations/finalizers
   - infisicalprojectroles/finalizers
   - infisicalprojects/finalizers
   verbs:

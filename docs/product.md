@@ -9,11 +9,12 @@ Kubernetes platform definitions often need an Infisical project and one or more 
 This project makes the control-plane relationship declarative and observable:
 
 1. A same-namespace `InfisicalConnection` supplies a host and bearer token.
-2. An `InfisicalProject` creates or adopts a project and records its external identity and environments.
-3. An `InfisicalEnvironment` waits for its project, then creates or adopts a project environment.
-4. An `InfisicalProjectRole` waits for its project, then creates or adopts a typed project permission role.
-5. An `InfisicalIdentity` waits for its project, then creates or adopts a machine identity and manages its mutable metadata and optional permanent project roles.
-6. An `InfisicalKubernetesAuth` waits for its identity, then configures Kubernetes service-account authentication for that identity.
+2. An `InfisicalOrganization` creates or adopts an explicit top-level organization boundary.
+3. An `InfisicalProject` creates or adopts a project, optionally validates its organization boundary, and records its external identity and environments.
+4. An `InfisicalEnvironment` waits for its project, then creates or adopts a project environment.
+5. An `InfisicalProjectRole` waits for its project, then creates or adopts a typed project permission role.
+6. An `InfisicalIdentity` creates or adopts a project- or organization-scoped machine identity, manages its mutable metadata, and optionally manages permanent project-role membership. Organization scope can grant the identity an Infisical organization role and explicit roles in selected projects.
+7. An `InfisicalKubernetesAuth` waits for its identity, then configures Kubernetes service-account authentication for that identity.
 
 Each resource reports a Kubernetes `Ready` condition, requeues after external drift checks, and watches the local dependencies that can change its result.
 
@@ -24,6 +25,6 @@ Creation is explicit through `creationPolicy`, while deletion is safe by default
 ## Non-goals for the first version
 
 - Synchronizing secrets into workloads; the official Infisical Kubernetes operator already owns that integration.
-- Managing organizations, folders, secrets, dynamic secrets, RBAC groups, temporary project-role assignments, organization-level identity role assignments, or authentication methods other than Kubernetes Auth.
+- Managing Infisical folders, secrets, dynamic secrets, RBAC groups, temporary project-role assignments, or authentication methods other than Kubernetes Auth.
 - Cross-namespace references or cross-tenant credential sharing.
 - Replacing the Infisical CLI or SDK for secret retrieval.
