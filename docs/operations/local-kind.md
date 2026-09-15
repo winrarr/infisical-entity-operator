@@ -15,7 +15,7 @@ The command:
 - installs Infisical `v0.165.8` from standalone chart `1.10.0`;
 - generates a random bootstrap password for this cluster invocation;
 - waits for the chart bootstrap job and reads its generated token only inside the cluster;
-- builds and loads the operator image;
+- builds and loads the operator image while the independent cluster services start;
 - installs the CRDs and operator chart;
 - applies the standard `config/network-policy/allow-infisical-egress-network-policy.yaml`;
 - creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
@@ -24,6 +24,8 @@ The command:
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
 
 The default Kind CNI makes this a fast reconciliation test. It does not provide evidence that NetworkPolicy rules are enforced; that depends on the installed CNI. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The default and Cilium modes use the same named cluster, so run `make kind-down` before switching between them.
+
+The E2E deployment consumes committed CRD and chart artifacts, so it does not run documentation generation. Its independent image, cluster, and operator preparation tasks run in parallel; adjust the worker count with `KIND_PARALLEL_JOBS` when needed.
 
 The generated instance-admin token is a cluster Secret named `infisical-bootstrap-token` in namespace `infisical`. It is intentionally not written to the checkout or printed by the test.
 
