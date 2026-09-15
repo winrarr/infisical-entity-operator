@@ -9,6 +9,7 @@ Kubernetes API
 Controller manager ── bearer-token HTTP ──▶ Infisical API
     │
     ├── InfisicalConnection: reachability and credential dependency
+    ├── InfisicalOrganization: top-level organization lifecycle and tenant boundary
     ├── InfisicalProject: external project lifecycle and observed environments
     ├── InfisicalEnvironment: project environment lifecycle
     ├── InfisicalProjectRole: project permission role lifecycle
@@ -16,13 +17,13 @@ Controller manager ── bearer-token HTTP ──▶ Infisical API
     └── InfisicalKubernetesAuth: Kubernetes service-account authentication configuration
 ```
 
-The manager uses controller-runtime for caching, reconciliation, status subresources, and finalizer updates. The external integration is a narrow typed HTTP client rather than a broad abstraction: its public surface mirrors only the project, environment, project-role, project-identity, organization-identity, project-membership, and Kubernetes Auth endpoints used by the controllers.
+The manager uses controller-runtime for caching, reconciliation, status subresources, and finalizer updates. The external integration is a narrow typed HTTP client rather than a broad abstraction: its public surface mirrors only the organization, project, environment, project-role, project-identity, organization-identity, project-membership, and Kubernetes Auth endpoints used by the controllers.
 
 ## Ownership and identity
 
 The Kubernetes object is the desired-state owner. External IDs are persisted in status after create or adopt and are then used for all subsequent reads, updates, and deletes. When an external object disappears, the controller clears the ID and follows the resource’s creation policy on the next reconciliation.
 
-Names are used only for the initial adopt lookup. A project is matched by requested slug first and then name; a project identity is matched by name inside the observed project; an organization identity is matched by name inside the observed organization; environments and roles are matched by stable slug. References are same-namespace and immutable where changing them would otherwise move an existing external object. Environment and role slugs are immutable after creation because downstream permissions and secret paths can refer to them.
+Names are used only for the initial adopt lookup. An organization is matched by explicit ID or name; a project is matched by requested slug first and then name; a project identity is matched by name inside the observed project; an organization identity is matched by name inside the observed organization; environments and roles are matched by stable slug. References are same-namespace and immutable where changing them would otherwise move an existing external object. Environment and role slugs are immutable after creation because downstream permissions and secret paths can refer to them.
 
 ## Reconciliation flow
 
@@ -31,7 +32,7 @@ Names are used only for the initial adopt lookup. A project is matched by reques
 3. Resolve the connection Secret and construct a client with the configured timeout.
 4. Resolve the Kubernetes dependency when applicable, and resolve auth-method Secrets without placing their contents in status.
 5. Adopt if allowed and no external ID is recorded; otherwise create if allowed.
-6. Read by external ID or identity, patch mutable fields when they drift, and reconcile declared identity memberships through Infisical’s identity-membership API. Project scope manages one project; organization scope manages the listed project bindings after verifying they belong to the anchor organization.
+6. Read by external ID or identity, patch mutable fields when they drift, and reconcile declared identity memberships through Infisical’s identity-membership API. Project scope manages one project; organization scope resolves an explicit organization and optionally manages the listed project bindings after verifying they belong to it.
 7. Write status and schedule a periodic drift check.
 8. Set a dependency or external failure condition and requeue with a shorter dependency delay or longer external delay.
 

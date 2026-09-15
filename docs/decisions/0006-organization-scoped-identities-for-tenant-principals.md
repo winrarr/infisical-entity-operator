@@ -1,6 +1,6 @@
 # 0006: Use organization-scoped identities for tenant principals
 
-Status: accepted
+Status: superseded by [0007: Make Infisical organizations explicit tenant boundaries](0007-explicit-organization-tenant-boundaries.md)
 
 Date: 2026-09-14
 
@@ -21,7 +21,7 @@ The resource owns the identity and the project memberships listed in its binding
 
 Infisical documents project identities as limited to one project and organization identities as assignable to one or more projects. An organization-scoped identity with an organization-level `no-access` role and explicit project memberships maps cleanly to a platform-created tenant principal without inventing a provider-independent tenant object or adding vCluster-specific branches to the core controller.
 
-The organization anchor is an existing project resource because this repository does not manage Infisical organizations. It also avoids copying an external organization ID into desired state while allowing identities to be created before all tenant project memberships are ready.
+This anchor model was intentionally replaced because it made the Infisical organization boundary implicit and did not support a tenant creating projects.
 
 The operator does not try to be a universal Kubernetes tenancy policy engine. A platform can install one operator instance per tenant cluster and issue that instance a machine-identity credential whose Infisical project memberships are defined by the trusted platform layer. Kubernetes RBAC and the deployment boundary remain responsible for limiting who can create or read CRs.
 

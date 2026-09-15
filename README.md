@@ -1,13 +1,13 @@
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical projects, environments, project roles, project- and organization-scoped machine identities, and Kubernetes Auth.
+Kubernetes-native lifecycle management for Infisical organizations, projects, environments, project roles, project- and organization-scoped machine identities, and Kubernetes Auth.
 
 The operator gives platform teams a declarative boundary around the Infisical control plane:
 
 ```text
-InfisicalConnection → InfisicalProject → InfisicalEnvironment
-                                      ├→ InfisicalProjectRole
-                                      └→ InfisicalIdentity → InfisicalKubernetesAuth
+InfisicalConnection → InfisicalOrganization → InfisicalProject → InfisicalEnvironment
+                                                    ├→ InfisicalProjectRole
+                                                    └→ InfisicalIdentity → InfisicalKubernetesAuth
 ```
 
 It handles create-or-adopt workflows, drift correction, dependency-aware status conditions, finalizers, and explicit deletion policy. Secret synchronization remains outside this project; use Infisical’s official Kubernetes operator for `InfisicalSecret`-style workloads.
@@ -62,7 +62,7 @@ An environment, project role, or Kubernetes Auth resource can reference the proj
 
 Set `spec.roleSlugs` on an identity to manage its permanent Infisical project roles. Omit the field to leave an existing membership unmanaged; use the built-in `no-access` role explicitly when an identity should have no project permissions.
 
-For platform-managed tenant principals, set `spec.scope: Organization`, point `spec.organizationRef` at a ready `InfisicalProject`, and declare the tenant’s project permissions in `spec.projectRoleBindings`. The organization identity defaults to Infisical’s `no-access` role and only receives the explicitly listed project roles.
+For platform-managed tenant principals, create one `InfisicalOrganization` per tenant, create an `InfisicalIdentity` with `spec.scope: Organization`, point `spec.organizationRef` at that organization, and set `organizationRole: admin` when the tenant must create its own projects. Projects can reference the same organization with `spec.organizationRef`. When an organization-admin machine identity creates a project, the operator automatically grants that creating identity permanent project-admin membership so it can manage the project and its child resources.
 
 Install the chart and CRDs from a repository checkout:
 

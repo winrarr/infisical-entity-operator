@@ -2,9 +2,10 @@
 
 ## Orientation
 
-This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1alpha1` are the source of truth for the six namespaced CRDs:
+This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1alpha1` are the source of truth for the seven namespaced CRDs:
 
 - `InfisicalConnection` validates an Infisical API endpoint and reads a same-namespace bearer-token Secret.
+- `InfisicalOrganization` creates or adopts an Infisical top-level organization used as a tenant boundary.
 - `InfisicalProject` creates, adopts, updates, observes, and optionally deletes an Infisical project.
 - `InfisicalEnvironment` creates, adopts, updates, observes, and optionally deletes a project environment.
 - `InfisicalProjectRole` creates, adopts, updates, observes, and optionally deletes a project permission role.
@@ -38,7 +39,7 @@ The default local environment is the isolated cluster named `infisical-entity-op
 
 ## Implementation expectations
 
-Keep reconciliation idempotent and status-driven. Use finalizers only for resources with `deletionPolicy: Delete`; the default is safe orphaning. Treat connection, project, and Secret references as same-namespace dependencies. Preserve external API error details in conditions without logging bearer tokens. Add focused unit tests for client contracts and reconciliation transitions, then run `make check`.
+Keep reconciliation idempotent and status-driven. Use finalizers only for resources with `deletionPolicy: Delete`; the default is safe orphaning. Treat connection, organization, project, and Secret references as same-namespace dependencies. Preserve external API error details in conditions without logging bearer tokens. Add focused unit tests for client contracts and reconciliation transitions, then run `make check`.
 
 Read `docs/architecture.md`, `docs/operations/local-kind.md`, and the relevant decision records before changing external API behavior or local cluster networking.
 

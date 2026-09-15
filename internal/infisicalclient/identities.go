@@ -378,6 +378,26 @@ func (c *Client) CreateIdentityMembership(ctx context.Context, projectID, identi
 	return &response.IdentityMembership, nil
 }
 
+// EnsureIdentityProjectMembership gives the current machine identity the requested
+// permanent project roles when it is not already a member. It is useful when an
+// organization administrator creates a project and Infisical does not automatically
+// create a project membership for the creating identity.
+func (c *Client) EnsureIdentityProjectMembership(ctx context.Context, projectID, identityID string, roleSlugs []string) error {
+	membership, err := c.GetIdentityMembership(ctx, projectID, identityID)
+	if err == nil {
+		if identityMembershipRolesEqual(membership.Roles, roleSlugs) {
+			return nil
+		}
+		_, err = c.UpdateIdentityMembership(ctx, projectID, identityID, roleSlugs)
+		return err
+	}
+	if !IsNotFound(err) {
+		return err
+	}
+	_, err = c.CreateIdentityMembership(ctx, projectID, identityID, roleSlugs)
+	return err
+}
+
 // UpdateIdentityMembership replaces a project identity membership's roles.
 func (c *Client) UpdateIdentityMembership(ctx context.Context, projectID, identityID string, roleSlugs []string) (*IdentityMembership, error) {
 	var response struct {
@@ -399,6 +419,25 @@ func identityMembershipRequest(roleSlugs []string) IdentityMembershipRequest {
 		roles = append(roles, IdentityMembershipRoleRequest{Role: slug})
 	}
 	return IdentityMembershipRequest{Roles: roles}
+}
+
+func identityMembershipRolesEqual(observed []IdentityMembershipRole, desired []string) bool {
+	if len(observed) != len(desired) {
+		return false
+	}
+	for _, desiredRole := range desired {
+		found := false
+		for _, observedRole := range observed {
+			if observedRole.Slug() == desiredRole && !observedRole.IsTemporary {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func validateIdentity(identity *Identity) error {

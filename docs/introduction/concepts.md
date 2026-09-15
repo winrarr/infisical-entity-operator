@@ -22,6 +22,6 @@ Each reconciler follows the same broad lifecycle:
 
 `deletionPolicy` controls remote cleanup. `Orphan` is the default and removes only the Kubernetes object. `Delete` requests remote deletion when the resource is deleted; it is intentionally opt-in because the operation may be irreversible.
 
-Project-scoped identities manage project-role membership only when `spec.roleSlugs` is present. Omitting the field leaves an existing membership unmanaged. Set `roleSlugs: [no-access]` when a project identity should explicitly have no project permissions. Organization-scoped identities use `spec.organizationRef` as an organization anchor and manage the listed project memberships through `spec.projectRoleBindings`; the organization role defaults to Infisical’s `no-access` role.
+Project-scoped identities manage project-role membership only when `spec.roleSlugs` is present. Omitting the field leaves an existing membership unmanaged. Set `roleSlugs: [no-access]` when a project identity should explicitly have no project permissions. Organization-scoped identities use `spec.organizationRef` to select an `InfisicalOrganization`; set `organizationRole: admin` when the tenant must create projects, or leave it empty for Infisical’s `no-access` role and manage selected project memberships through `spec.projectRoleBindings`.
 
 The [resource reference](../reference/resources.md), [status conventions](../reference/status-and-conditions.md), and [generated API reference](../reference/api.md) describe the exact contract.

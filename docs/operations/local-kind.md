@@ -18,11 +18,13 @@ The command:
 - builds and loads the operator image;
 - installs the CRDs and operator chart;
 - applies `config/network-policy/allow-infisical-egress.yaml`;
-- creates connection, two projects, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
+- creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
 - creates project-role and Kubernetes Auth resources and verifies their external error handling when the local Infisical plan rejects custom roles or cluster-local Kubernetes review URLs;
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
 
 The generated instance-admin token is a cluster Secret named `infisical-bootstrap-token` in namespace `infisical`. It is intentionally not written to the checkout or printed by the test.
+
+The multi-tenancy targets use the bootstrap user credentials stored in `infisical-bootstrap-credentials` to create temporary top-level organizations. The vCluster target gives its in-cluster operator an organization-scoped machine identity with `organizationRole: admin`, so the tenant creates a project in that organization. The Capsule target creates one such identity per Capsule tenant and uses Kyverno to require each tenant’s `InfisicalProject.spec.organizationRef` to point at its own adopted organization.
 
 ## Inspect a failed run
 

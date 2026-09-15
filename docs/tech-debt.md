@@ -96,7 +96,7 @@ Status: accepted limitation
 
 ### Evidence
 
-Resources, ownership references, and credential references are namespaced and same-namespace by design. The accepted tenant-principal model uses Infisical organization-scoped machine identities with explicit project memberships, but the default manager still watches cluster-wide and its ClusterRole can read Secrets across namespaces. That deployment is therefore suitable for a trusted platform team, not mutually untrusted tenant workloads.
+Resources, ownership references, and credential references are namespaced and same-namespace by design. The accepted tenant-boundary model uses one Infisical organization per tenant and organization-scoped machine identities with project memberships, but the default manager still watches cluster-wide and its ClusterRole can read Secrets across namespaces. That deployment is therefore suitable for a trusted platform team, not mutually untrusted tenant workloads.
 
 ### Impact
 

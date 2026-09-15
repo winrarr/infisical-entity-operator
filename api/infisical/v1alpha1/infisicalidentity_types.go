@@ -45,8 +45,8 @@ type InfisicalIdentitySpec struct {
 	ConnectionRef InfisicalConnectionReference `json:"connectionRef"`
 
 	// Scope selects whether Infisical manages this identity at project or organization scope.
-	// It defaults to Project. Organization-scoped identities are useful as tenant principals:
-	// assign their project access through projectRoleBindings.
+	// It defaults to Project. Organization-scoped identities are useful as tenant principals;
+	// use organizationRole: admin when the tenant should create its own projects.
 	// +optional
 	// +kubebuilder:default=Project
 	Scope IdentityScope `json:"scope,omitempty"`
@@ -55,8 +55,8 @@ type InfisicalIdentitySpec struct {
 	// +optional
 	ProjectRef *LocalObjectReference `json:"projectRef,omitempty"`
 
-	// OrganizationRef references an InfisicalProject resource whose observed organization owns
-	// an organization-scoped identity. The project itself need not be listed in projectRoleBindings.
+	// OrganizationRef references an InfisicalOrganization resource whose observed organization
+	// owns an organization-scoped identity. The project itself need not be listed in projectRoleBindings.
 	// +optional
 	OrganizationRef *LocalObjectReference `json:"organizationRef,omitempty"`
 

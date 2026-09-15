@@ -18,6 +18,7 @@ package infisical
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -54,6 +55,9 @@ const (
 	testSecondMembershipPath         = "/api/v1/projects/project-2/memberships/identities/identity-1"
 	testCustomReaderRole             = "custom-reader"
 	testMemberRole                   = "member"
+	testProjectsPath                 = "/api/v1/projects"
+	testProjectByIDPath              = "/api/v1/projects/project-1"
+	testTenantOrganizationName       = "tenant-org"
 )
 
 type infisicalMembershipRequest struct {
@@ -77,6 +81,7 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 		WithObjects(objects...).
 		WithStatusSubresource(
 			&infisicalv1alpha1.InfisicalConnection{},
+			&infisicalv1alpha1.InfisicalOrganization{},
 			&infisicalv1alpha1.InfisicalProject{},
 			&infisicalv1alpha1.InfisicalIdentity{},
 			&infisicalv1alpha1.InfisicalEnvironment{},
@@ -108,7 +113,7 @@ func connectionAndSecret(serverURL string) (*infisicalv1alpha1.InfisicalConnecti
 
 func TestConnectionReconcilerReportsReachability(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/api/v1/projects" || request.Header.Get("Authorization") != "Bearer test-token" {
+		if request.URL.Path != testProjectsPath || request.Header.Get("Authorization") != "Bearer test-token" {
 			http.Error(writer, "unexpected request", http.StatusBadRequest)
 			return
 		}
@@ -134,15 +139,95 @@ func TestConnectionReconcilerReportsReachability(t *testing.T) {
 	}
 }
 
+func TestOrganizationReconcilerCreatesOrganization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v2/organizations":
+			_, _ = writer.Write([]byte(`{"organization":{"id":"org-1","name":"tenant-org","slug":"tenant-org"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/organization/org-1":
+			_, _ = writer.Write([]byte(`{"organization":{"id":"org-1","name":"tenant-org","slug":"tenant-org"}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantOrganizationName, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalOrganizationSpec{
+			ConnectionRef:    infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationName: testTenantOrganizationName,
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization)
+	reconciler := &InfisicalOrganizationReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(organization)}); err != nil {
+		t.Fatalf("reconcile organization: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalOrganization
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(organization), &observed); err != nil {
+		t.Fatalf("get organization: %v", err)
+	}
+	if observed.Status.OrganizationID != testOrganizationID || observed.Status.OrganizationName != testTenantOrganizationName || observed.Status.Slug != testTenantOrganizationName {
+		t.Fatalf("unexpected organization status: %#v", observed.Status)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestOrganizationReconcilerAdoptsWithMachineIdentityProjectVisibility(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/organization/org-1":
+			http.Error(writer, "user JWT required", http.StatusForbidden)
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects":
+			_, _ = writer.Write([]byte(`{"projects":[{"id":"project-1","name":"anchor","orgId":"org-1"}]}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantOrganizationName, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalOrganizationSpec{
+			ConnectionRef:  infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationID: testOrganizationID,
+			CreationPolicy: infisicalv1alpha1.CreationPolicyAdopt,
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization)
+	reconciler := &InfisicalOrganizationReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(organization)}); err != nil {
+		t.Fatalf("reconcile adopted organization: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalOrganization
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(organization), &observed); err != nil {
+		t.Fatalf("get organization: %v", err)
+	}
+	if observed.Status.OrganizationID != testOrganizationID || len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("unexpected adopted organization status: %#v", observed.Status)
+	}
+}
+
 func TestProjectReconcilerCreatesAndUpdatesProject(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch {
-		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects":
+		case request.Method == http.MethodPost && request.URL.Path == testProjectsPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","environments":[]}}`))
-		case request.Method == http.MethodPatch && request.URL.Path == "/api/v1/projects/project-1":
+		case request.Method == http.MethodPatch && request.URL.Path == testProjectByIDPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","description":"updated","environments":[{"id":"env-1","name":"Production","slug":"prod"}]}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1":
+		case request.Method == http.MethodGet && request.URL.Path == testProjectByIDPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","environments":[{"id":"env-1","name":"Production","slug":"prod"}]}}`))
 		default:
 			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
@@ -218,6 +303,66 @@ func TestProjectReconcilerAddsDeleteFinalizer(t *testing.T) {
 	}
 	if len(observed.Finalizers) != 1 {
 		t.Fatalf("expected delete finalizer, got %#v", observed.Finalizers)
+	}
+}
+
+func TestProjectReconcilerGrantsCreatorAccessForOrganizationProject(t *testing.T) {
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"identityId":"identity-1"}`))
+	token := "header." + claims + ".signature"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testProjectsPath:
+			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo","orgId":"org-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/memberships/identities/identity-1":
+			http.Error(writer, "membership not found", http.StatusNotFound)
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/memberships/identities/identity-1":
+			var body infisicalMembershipRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode membership request: %v", err)
+			}
+			if len(body.Roles) != 1 || body.Roles[0].Role != "admin" || body.Roles[0].IsTemporary {
+				t.Errorf("unexpected membership request: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"identityMembership":{"id":"membership-1","projectId":"project-1","identityId":"identity-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1":
+			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo","orgId":"org-1","environments":[]}}`))
+		default:
+			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	secret.Data[testTokenKey] = []byte(token)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: "tenant-boundary", Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalOrganizationStatus{OrganizationID: testOrganizationID},
+	}
+	project := &infisicalv1alpha1.InfisicalProject{
+		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalProjectSpec{
+			ConnectionRef:   infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationRef: &infisicalv1alpha1.LocalObjectReference{Name: organization.Name},
+			ProjectName:     testProject,
+		},
+	}
+	kubeClient := testClient(t, connection, secret, organization, project)
+	reconciler := &InfisicalProjectReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)}); err != nil {
+		t.Fatalf("reconcile organization project: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalProject
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(project), &observed); err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if observed.Status.ProjectID != testProjectID || observed.Status.OrganizationID != testOrganizationID {
+		t.Fatalf("unexpected organization project status: %#v", observed.Status)
+	}
+	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
 }
 
@@ -316,9 +461,9 @@ func TestIdentityReconcilerCreatesOrganizationIdentityAndProjectMembership(t *te
 	defer server.Close()
 
 	connection, secret := connectionAndSecret(server.URL)
-	anchor := &infisicalv1alpha1.InfisicalProject{
-		ObjectMeta: metav1.ObjectMeta{Name: testProject, Namespace: testNamespace},
-		Status:     infisicalv1alpha1.InfisicalProjectStatus{ProjectID: testProjectID, OrganizationID: testOrganizationID},
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantOrganizationName, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalOrganizationStatus{OrganizationID: testOrganizationID},
 	}
 	boundProject := &infisicalv1alpha1.InfisicalProject{
 		ObjectMeta: metav1.ObjectMeta{Name: "secondary", Namespace: testNamespace},
@@ -330,7 +475,7 @@ func TestIdentityReconcilerCreatesOrganizationIdentityAndProjectMembership(t *te
 			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
 			Scope:         infisicalv1alpha1.IdentityScopeOrganization,
 			OrganizationRef: &infisicalv1alpha1.LocalObjectReference{
-				Name: anchor.Name,
+				Name: organization.Name,
 			},
 			ProjectRoleBindings: []infisicalv1alpha1.IdentityProjectRoleBinding{{
 				ProjectRef: infisicalv1alpha1.LocalObjectReference{Name: boundProject.Name},
@@ -338,7 +483,7 @@ func TestIdentityReconcilerCreatesOrganizationIdentityAndProjectMembership(t *te
 			}},
 		},
 	}
-	kubeClient := testClient(t, connection, secret, anchor, boundProject, identity)
+	kubeClient := testClient(t, connection, secret, organization, boundProject, identity)
 	reconciler := &InfisicalIdentityReconciler{Client: kubeClient}
 
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)}); err != nil {

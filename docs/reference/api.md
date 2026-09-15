@@ -13,6 +13,7 @@ Package v1alpha1 contains API Schema definitions for the infisical v1alpha1 API 
 - [InfisicalEnvironment](#infisicalenvironment)
 - [InfisicalIdentity](#infisicalidentity)
 - [InfisicalKubernetesAuth](#infisicalkubernetesauth)
+- [InfisicalOrganization](#infisicalorganization)
 - [InfisicalProject](#infisicalproject)
 - [InfisicalProjectRole](#infisicalprojectrole)
 
@@ -31,6 +32,7 @@ _Appears in:_
 - [InfisicalEnvironmentSpec](#infisicalenvironmentspec)
 - [InfisicalIdentitySpec](#infisicalidentityspec)
 - [InfisicalKubernetesAuthSpec](#infisicalkubernetesauthspec)
+- [InfisicalOrganizationSpec](#infisicalorganizationspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
 
@@ -54,6 +56,7 @@ _Appears in:_
 - [InfisicalEnvironmentSpec](#infisicalenvironmentspec)
 - [InfisicalIdentitySpec](#infisicalidentityspec)
 - [InfisicalKubernetesAuthSpec](#infisicalkubernetesauthspec)
+- [InfisicalOrganizationSpec](#infisicalorganizationspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
 
@@ -146,6 +149,7 @@ _Appears in:_
 - [InfisicalEnvironmentSpec](#infisicalenvironmentspec)
 - [InfisicalIdentitySpec](#infisicalidentityspec)
 - [InfisicalKubernetesAuthSpec](#infisicalkubernetesauthspec)
+- [InfisicalOrganizationSpec](#infisicalorganizationspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
 - [InfisicalProjectSpec](#infisicalprojectspec)
 
@@ -244,9 +248,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection. |  |  |
-| `scope` _[IdentityScope](#identityscope)_ | Scope selects whether Infisical manages this identity at project or organization scope.<br />It defaults to Project. Organization-scoped identities are useful as tenant principals:<br />assign their project access through projectRoleBindings. | Project | Enum: [Project Organization] <br />Optional: \{\} <br /> |
+| `scope` _[IdentityScope](#identityscope)_ | Scope selects whether Infisical manages this identity at project or organization scope.<br />It defaults to Project. Organization-scoped identities are useful as tenant principals;<br />use organizationRole: admin when the tenant should create its own projects. | Project | Enum: [Project Organization] <br />Optional: \{\} <br /> |
 | `projectRef` _[LocalObjectReference](#localobjectreference)_ | ProjectRef references the InfisicalProject resource that owns a project-scoped identity. |  | Optional: \{\} <br /> |
-| `organizationRef` _[LocalObjectReference](#localobjectreference)_ | OrganizationRef references an InfisicalProject resource whose observed organization owns<br />an organization-scoped identity. The project itself need not be listed in projectRoleBindings. |  | Optional: \{\} <br /> |
+| `organizationRef` _[LocalObjectReference](#localobjectreference)_ | OrganizationRef references an InfisicalOrganization resource whose observed organization<br />owns an organization-scoped identity. The project itself need not be listed in projectRoleBindings. |  | Optional: \{\} <br /> |
 | `identityName` _string_ | IdentityName is the Infisical identity name. If omitted, metadata.name is used. |  | MinLength: 1 <br />Optional: \{\} <br /> |
 | `hasDeleteProtection` _boolean_ | HasDeleteProtection configures Infisical-side delete protection. | false | Optional: \{\} <br /> |
 | `metadata` _[IdentityMetadata](#identitymetadata) array_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
@@ -306,6 +310,44 @@ _Appears in:_
 | `accessTokenNumUsesLimit` _integer_ | AccessTokenNumUsesLimit limits access token uses. Zero means unlimited. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the operator attaches or adopts Kubernetes Auth. | Create | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | DeletionPolicy controls whether the remote auth method is removed with this resource. | Orphan | Enum: [Delete Orphan] <br />Optional: \{\} <br /> |
+
+
+#### InfisicalOrganization
+
+
+
+InfisicalOrganization is the Schema for the infisicalorganizations API.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `infisical.infisical-operator.io/v1alpha1` | | |
+| `kind` _string_ | `InfisicalOrganization` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[InfisicalOrganizationSpec](#infisicalorganizationspec)_ | Spec defines the desired state of InfisicalOrganization. |  | Required: \{\} <br /> |
+
+
+#### InfisicalOrganizationSpec
+
+
+
+InfisicalOrganizationSpec defines the desired state of an Infisical organization.
+
+
+
+_Appears in:_
+- [InfisicalOrganization](#infisicalorganization)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection used for organization lifecycle.<br />Creating or deleting an organization requires a user JWT or API key; machine identity<br />tokens can adopt an explicit organization after the platform has provisioned it. |  |  |
+| `organizationID` _string_ | OrganizationID identifies an existing organization to adopt. It is also the explicit<br />boundary used by tenant operators, which may not be able to call Infisical's user-only<br />organization lookup endpoint. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `organizationName` _string_ | OrganizationName is the Infisical display name. If omitted, metadata.name is used.<br />It is required when creating an organization and is used for name-based adoption. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the operator creates or adopts an organization. | Create | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
+| `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | DeletionPolicy controls whether the external organization is deleted with this resource. | Orphan | Enum: [Delete Orphan] <br />Optional: \{\} <br /> |
 
 
 #### InfisicalProject
@@ -381,6 +423,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `connectionRef` _[InfisicalConnectionReference](#infisicalconnectionreference)_ | ConnectionRef selects the Infisical API connection. |  |  |
+| `organizationRef` _[LocalObjectReference](#localobjectreference)_ | OrganizationRef optionally identifies the Infisical organization in which this project<br />must be created or adopted. When set, the observed project organization must match it. |  | Optional: \{\} <br /> |
 | `projectName` _string_ | ProjectName is the Infisical project name. If omitted, metadata.name is used. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `description` _string_ | Description is an optional project description. |  | MaxLength: 1024 <br />Optional: \{\} <br /> |
 | `slug` _string_ | Slug is an optional unique project slug. |  | MaxLength: 64 <br />MinLength: 5 <br />Optional: \{\} <br /> |
@@ -439,6 +482,7 @@ _Appears in:_
 - [InfisicalIdentitySpec](#infisicalidentityspec)
 - [InfisicalKubernetesAuthSpec](#infisicalkubernetesauthspec)
 - [InfisicalProjectRoleSpec](#infisicalprojectrolespec)
+- [InfisicalProjectSpec](#infisicalprojectspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |

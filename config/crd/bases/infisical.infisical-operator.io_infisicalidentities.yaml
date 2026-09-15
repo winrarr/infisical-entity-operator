@@ -100,8 +100,8 @@ spec:
                 x-kubernetes-list-type: map
               organizationRef:
                 description: |-
-                  OrganizationRef references an InfisicalProject resource whose observed organization owns
-                  an organization-scoped identity. The project itself need not be listed in projectRoleBindings.
+                  OrganizationRef references an InfisicalOrganization resource whose observed organization
+                  owns an organization-scoped identity. The project itself need not be listed in projectRoleBindings.
                 properties:
                   name:
                     description: Name is the referenced resource name.
@@ -176,8 +176,8 @@ spec:
                 default: Project
                 description: |-
                   Scope selects whether Infisical manages this identity at project or organization scope.
-                  It defaults to Project. Organization-scoped identities are useful as tenant principals:
-                  assign their project access through projectRoleBindings.
+                  It defaults to Project. Organization-scoped identities are useful as tenant principals;
+                  use organizationRole: admin when the tenant should create its own projects.
                 enum:
                 - Project
                 - Organization

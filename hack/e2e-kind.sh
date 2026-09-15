@@ -18,6 +18,7 @@ cleanup() {
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalkubernetesauth/e2e-kubernetes-auth --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalprojectrole/e2e-project-role --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalenvironment/e2e-environment --ignore-not-found --wait=true >/dev/null 2>&1 || true
+    "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalorganization/e2e-organization --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalidentity/e2e-tenant-identity --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalidentity/e2e-identity --ignore-not-found --wait=true >/dev/null 2>&1 || true
     "${KUBECTL}" -n "${TEST_NAMESPACE}" delete infisicalproject/e2e-tenant-secondary --ignore-not-found --wait=true >/dev/null 2>&1 || true
@@ -150,31 +151,6 @@ spec:
   deletionPolicy: Delete
 ---
 apiVersion: infisical.infisical-operator.io/v1alpha1
-kind: InfisicalIdentity
-metadata:
-  name: e2e-tenant-identity
-spec:
-  connectionRef:
-    name: infisical
-  scope: Organization
-  organizationRef:
-    name: e2e-project
-  projectRoleBindings:
-    - projectRef:
-        name: e2e-project
-      roleSlugs:
-        - no-access
-    - projectRef:
-        name: e2e-tenant-secondary
-      roleSlugs:
-        - member
-  metadata:
-    - key: test
-      value: kind-organization-identity
-  creationPolicy: Create
-  deletionPolicy: Delete
----
-apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalEnvironment
 metadata:
   name: e2e-environment
@@ -200,9 +176,54 @@ EOF
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalidentity/e2e-identity --timeout=5m
 "${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
-  infisicalidentity/e2e-tenant-identity --timeout=5m
-"${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
   infisicalenvironment/e2e-environment --timeout=5m
+
+organization_id="$(${KUBECTL} -n "${TEST_NAMESPACE}" get infisicalproject/e2e-project -o jsonpath='{.status.organizationID}')"
+if [[ -z "${organization_id}" ]]; then
+  echo "the project did not expose an Infisical organization ID" >&2
+  exit 1
+fi
+cat <<EOF | "${KUBECTL}" -n "${TEST_NAMESPACE}" apply -f -
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalOrganization
+metadata:
+  name: e2e-organization
+spec:
+  connectionRef:
+    name: infisical
+  organizationID: ${organization_id}
+  creationPolicy: Adopt
+  deletionPolicy: Orphan
+---
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalIdentity
+metadata:
+  name: e2e-tenant-identity
+spec:
+  connectionRef:
+    name: infisical
+  scope: Organization
+  organizationRef:
+    name: e2e-organization
+  projectRoleBindings:
+    - projectRef:
+        name: e2e-project
+      roleSlugs:
+        - no-access
+    - projectRef:
+        name: e2e-tenant-secondary
+      roleSlugs:
+        - member
+  metadata:
+    - key: test
+      value: kind-organization-identity
+  creationPolicy: Create
+  deletionPolicy: Delete
+EOF
+"${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
+  infisicalorganization/e2e-organization --timeout=5m
+"${KUBECTL}" -n "${TEST_NAMESPACE}" wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' \
+  infisicalidentity/e2e-tenant-identity --timeout=5m
 
 cat <<EOF | "${KUBECTL}" -n "${TEST_NAMESPACE}" apply -f -
 apiVersion: infisical.infisical-operator.io/v1alpha1

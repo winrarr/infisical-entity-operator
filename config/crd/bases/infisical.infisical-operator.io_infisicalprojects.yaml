@@ -75,6 +75,18 @@ spec:
                 description: HasDeleteProtection configures Infisical-side delete
                   protection.
                 type: boolean
+              organizationRef:
+                description: |-
+                  OrganizationRef optionally identifies the Infisical organization in which this project
+                  must be created or adopted. When set, the observed project organization must match it.
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               projectName:
                 description: ProjectName is the Infisical project name. If omitted,
                   metadata.name is used.
@@ -110,6 +122,8 @@ spec:
             x-kubernetes-validations:
             - message: connectionRef is immutable; delete and recreate the InfisicalProject
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
+            - message: organizationRef is immutable; delete and recreate the InfisicalProject
+              rule: '!has(oldSelf.organizationRef) || self.organizationRef == oldSelf.organizationRef'
             - message: shouldCreateDefaultEnvs is immutable; delete and recreate the
                 InfisicalProject
               rule: '!has(oldSelf.shouldCreateDefaultEnvs) || self.shouldCreateDefaultEnvs

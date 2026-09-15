@@ -50,6 +50,7 @@ func (e *identityConfigurationError) Unwrap() error { return e.err }
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalidentities/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalidentities/finalizers,verbs=update
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalconnections,verbs=get;list;watch
+// +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalorganizations,verbs=get;list;watch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojects,verbs=get;list;watch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojectroles,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -86,6 +87,9 @@ func (r *InfisicalIdentityReconciler) reconcileIdentity(ctx context.Context, ide
 	anchor, err := r.identityAnchor(ctx, identity, scope)
 	if err != nil {
 		reason := "ProjectNotReady"
+		if scope == infisicalv1alpha1.IdentityScopeOrganization {
+			reason = "OrganizationNotReady"
+		}
 		var configurationErr *identityConfigurationError
 		if errors.As(err, &configurationErr) {
 			reason = "ConfigurationInvalid"
@@ -223,14 +227,38 @@ type identityAnchor struct {
 }
 
 func (r *InfisicalIdentityReconciler) identityAnchor(ctx context.Context, identity *infisicalv1alpha1.InfisicalIdentity, scope infisicalv1alpha1.IdentityScope) (*identityAnchor, error) {
-	projectName := ""
-	if identity.Spec.ProjectRef != nil {
-		projectName = identity.Spec.ProjectRef.Name
-	}
 	if scope == infisicalv1alpha1.IdentityScopeOrganization {
-		projectName = identity.Spec.OrganizationRef.Name
+		var organization infisicalv1alpha1.InfisicalOrganization
+		if err := r.Get(ctx, client.ObjectKey{Namespace: identity.Namespace, Name: identity.Spec.OrganizationRef.Name}, &organization); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, newDependencyError("InfisicalOrganization %s/%s was not found", identity.Namespace, identity.Spec.OrganizationRef.Name)
+			}
+			return nil, err
+		}
+		if organization.Status.OrganizationID == "" {
+			return nil, newDependencyError("InfisicalOrganization %s/%s has no observed Infisical organization ID", organization.Namespace, organization.Name)
+		}
+
+		anchor := &identityAnchor{organizationID: organization.Status.OrganizationID}
+		for _, binding := range identity.Spec.ProjectRoleBindings {
+			var boundProject infisicalv1alpha1.InfisicalProject
+			if err := r.Get(ctx, client.ObjectKey{Namespace: identity.Namespace, Name: binding.ProjectRef.Name}, &boundProject); err != nil {
+				if apierrors.IsNotFound(err) {
+					return nil, newDependencyError("InfisicalProject %s/%s was not found", identity.Namespace, binding.ProjectRef.Name)
+				}
+				return nil, err
+			}
+			if boundProject.Status.ProjectID == "" {
+				return nil, newDependencyError("InfisicalProject %s/%s has no observed Infisical project ID", boundProject.Namespace, boundProject.Name)
+			}
+			if boundProject.Status.OrganizationID != anchor.organizationID {
+				return nil, &identityConfigurationError{err: fmt.Errorf("projectRoleBindings project %q belongs to organization %q, want %q", binding.ProjectRef.Name, boundProject.Status.OrganizationID, anchor.organizationID)}
+			}
+		}
+		return anchor, nil
 	}
 
+	projectName := identity.Spec.ProjectRef.Name
 	var project infisicalv1alpha1.InfisicalProject
 	if err := r.Get(ctx, client.ObjectKey{Namespace: identity.Namespace, Name: projectName}, &project); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -241,30 +269,7 @@ func (r *InfisicalIdentityReconciler) identityAnchor(ctx context.Context, identi
 	if project.Status.ProjectID == "" {
 		return nil, newDependencyError("InfisicalProject %s/%s has no observed Infisical project ID", project.Namespace, project.Name)
 	}
-	if scope == infisicalv1alpha1.IdentityScopeOrganization && project.Status.OrganizationID == "" {
-		return nil, newDependencyError("InfisicalProject %s/%s has no observed Infisical organization ID", project.Namespace, project.Name)
-	}
-
-	anchor := &identityAnchor{projectID: project.Status.ProjectID, organizationID: project.Status.OrganizationID}
-	if scope != infisicalv1alpha1.IdentityScopeOrganization {
-		return anchor, nil
-	}
-	for _, binding := range identity.Spec.ProjectRoleBindings {
-		var boundProject infisicalv1alpha1.InfisicalProject
-		if err := r.Get(ctx, client.ObjectKey{Namespace: identity.Namespace, Name: binding.ProjectRef.Name}, &boundProject); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, newDependencyError("InfisicalProject %s/%s was not found", identity.Namespace, binding.ProjectRef.Name)
-			}
-			return nil, err
-		}
-		if boundProject.Status.ProjectID == "" {
-			return nil, newDependencyError("InfisicalProject %s/%s has no observed Infisical project ID", boundProject.Namespace, boundProject.Name)
-		}
-		if boundProject.Status.OrganizationID != anchor.organizationID {
-			return nil, &identityConfigurationError{err: fmt.Errorf("projectRoleBindings project %q belongs to organization %q, want %q", binding.ProjectRef.Name, boundProject.Status.OrganizationID, anchor.organizationID)}
-		}
-	}
-	return anchor, nil
+	return &identityAnchor{projectID: project.Status.ProjectID}, nil
 }
 
 func validateIdentitySpec(identity *infisicalv1alpha1.InfisicalIdentity) error {
@@ -469,7 +474,7 @@ func (r *InfisicalIdentityReconciler) reconcileIdentityDeletion(ctx context.Cont
 }
 
 func identityReferencesProject(identity *infisicalv1alpha1.InfisicalIdentity, projectName string) bool {
-	if (identity.Spec.ProjectRef != nil && identity.Spec.ProjectRef.Name == projectName) || (identity.Spec.OrganizationRef != nil && identity.Spec.OrganizationRef.Name == projectName) {
+	if identity.Spec.ProjectRef != nil && identity.Spec.ProjectRef.Name == projectName {
 		return true
 	}
 	for _, binding := range identity.Spec.ProjectRoleBindings {
@@ -478,6 +483,10 @@ func identityReferencesProject(identity *infisicalv1alpha1.InfisicalIdentity, pr
 		}
 	}
 	return false
+}
+
+func identityReferencesOrganization(identity *infisicalv1alpha1.InfisicalIdentity, organizationName string) bool {
+	return identity.Spec.OrganizationRef != nil && identity.Spec.OrganizationRef.Name == organizationName
 }
 
 func identityUsesRole(identity *infisicalv1alpha1.InfisicalIdentity, projectName, roleSlug string) bool {
@@ -518,6 +527,20 @@ func (r *InfisicalIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			for i := range identities.Items {
 				identity := &identities.Items[i]
 				if identityReferencesProject(identity, object.GetName()) {
+					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
+				}
+			}
+			return requests
+		})).
+		Watches(&infisicalv1alpha1.InfisicalOrganization{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
+			var identities infisicalv1alpha1.InfisicalIdentityList
+			if err := mgr.GetClient().List(ctx, &identities, client.InNamespace(object.GetNamespace())); err != nil {
+				return nil
+			}
+			requests := make([]ctrl.Request, 0)
+			for i := range identities.Items {
+				identity := &identities.Items[i]
+				if identityReferencesOrganization(identity, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
 				}
 			}

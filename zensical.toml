@@ -31,6 +31,7 @@ nav = [
     { "Custom Resources" = [
       "crds/index.md",
       { "InfisicalConnection" = "crds/infisical-connection.md" },
+      { "InfisicalOrganization" = "crds/infisical-organization.md" },
       { "InfisicalProject" = "crds/infisical-project.md" },
       { "InfisicalEnvironment" = "crds/infisical-environment.md" },
       { "InfisicalProjectRole" = "crds/infisical-project-role.md" },
