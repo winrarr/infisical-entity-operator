@@ -19,6 +19,7 @@ The command:
 - installs the CRDs and operator chart;
 - applies `config/network-policy/allow-infisical-egress.yaml`;
 - creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
+- creates a project-template resource and uses it for the primary project when the local Infisical plan permits templates; otherwise it records the plan restriction and verifies ordinary project reconciliation;
 - creates project-role and Kubernetes Auth resources and verifies their external error handling when the local Infisical plan rejects custom roles or cluster-local Kubernetes review URLs;
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
 

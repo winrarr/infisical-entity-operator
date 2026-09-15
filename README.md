@@ -1,6 +1,6 @@
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical organizations, projects, environments, project roles, project- and organization-scoped machine identities, and Kubernetes Auth.
+Kubernetes-native lifecycle management for Infisical organizations, project templates, projects, environments, project roles, project- and organization-scoped machine identities, and Kubernetes Auth.
 
 The operator gives platform teams a declarative boundary around the Infisical control plane:
 

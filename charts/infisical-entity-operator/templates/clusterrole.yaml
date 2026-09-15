@@ -22,6 +22,7 @@ rules:
   - infisicalorganizations
   - infisicalprojectroles
   - infisicalprojects
+  - infisicalprojecttemplates
   verbs:
   - create
   - delete
@@ -40,6 +41,7 @@ rules:
   - infisicalorganizations/status
   - infisicalprojectroles/status
   - infisicalprojects/status
+  - infisicalprojecttemplates/status
   verbs:
   - get
   - patch
@@ -53,5 +55,6 @@ rules:
   - infisicalorganizations/finalizers
   - infisicalprojectroles/finalizers
   - infisicalprojects/finalizers
+  - infisicalprojecttemplates/finalizers
   verbs:
   - update

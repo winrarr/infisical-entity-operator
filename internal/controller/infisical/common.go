@@ -339,6 +339,13 @@ func boolValue(value *bool, defaultValue bool) bool {
 	return *value
 }
 
+func stringPointerIfSet(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
 func projectStatusFrom(project *infisicalclient.Project) (string, string, string, []infisicalv1alpha1.EnvironmentStatus) {
 	environments := make([]infisicalv1alpha1.EnvironmentStatus, 0, len(project.Environments))
 	for _, environment := range project.Environments {

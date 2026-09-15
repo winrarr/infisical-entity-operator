@@ -6,7 +6,8 @@ All operator CRDs are namespaced and use API group `infisical.infisical-operator
 | --- | --- | --- |
 | [InfisicalConnection](../crds/infisical-connection.md) | Same-namespace bearer-token Secret | Infisical API endpoint and authentication health |
 | [InfisicalOrganization](../crds/infisical-organization.md) | InfisicalConnection | Infisical organization and tenant boundary |
-| [InfisicalProject](../crds/infisical-project.md) | InfisicalConnection, optional InfisicalOrganization | Infisical project |
+| [InfisicalProjectTemplate](../crds/infisical-project-template.md) | InfisicalConnection, optional InfisicalOrganization | Reusable Infisical project blueprint |
+| [InfisicalProject](../crds/infisical-project.md) | InfisicalConnection, optional InfisicalOrganization and InfisicalProjectTemplate | Infisical project |
 | [InfisicalEnvironment](../crds/infisical-environment.md) | InfisicalConnection, InfisicalProject | Project environment |
 | [InfisicalProjectRole](../crds/infisical-project-role.md) | InfisicalConnection, InfisicalProject | Project permission role |
 | [InfisicalIdentity](../crds/infisical-identity.md) | InfisicalConnection, InfisicalProject, or InfisicalOrganization | Project- or organization-scoped machine identity and optional permanent project-role membership |

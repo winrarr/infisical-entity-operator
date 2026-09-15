@@ -1,6 +1,6 @@
 # Custom resources
 
-The seven namespaced CRDs form one small dependency graph. Begin with `InfisicalConnection`, then create or adopt an organization when a tenant boundary is needed, followed by projects and their project-scoped resources. `InfisicalIdentity` also supports an organization-scoped machine identity with an organization role and optional project-role bindings.
+The eight namespaced CRDs form one small dependency graph. Begin with `InfisicalConnection`, then create or adopt an organization when a tenant boundary is needed, optionally create reusable project templates, and then create projects and their project-scoped resources. `InfisicalIdentity` also supports an organization-scoped machine identity with an organization role and optional project-role bindings.
 
 Each guide contains the resource’s purpose, dependency rules, lifecycle behavior, and a minimal manifest. For all fields, defaults, validation, and status properties, use the [generated API reference](../reference/api.md).
 
@@ -8,6 +8,7 @@ Each guide contains the resource’s purpose, dependency rules, lifecycle behavi
 | --- | --- |
 | [InfisicalConnection](infisical-connection.md) | API endpoint and bearer-token Secret |
 | [InfisicalOrganization](infisical-organization.md) | Infisical organization and tenant boundary |
+| [InfisicalProjectTemplate](infisical-project-template.md) | Reusable project blueprint |
 | [InfisicalProject](infisical-project.md) | Infisical project |
 | [InfisicalEnvironment](infisical-environment.md) | Project environment |
 | [InfisicalProjectRole](infisical-project-role.md) | Project permission role |

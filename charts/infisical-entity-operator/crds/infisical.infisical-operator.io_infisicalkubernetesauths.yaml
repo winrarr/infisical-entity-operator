@@ -141,10 +141,12 @@ spec:
               gatewayID:
                 description: GatewayID selects an Infisical gateway for token review
                   when gateway mode is used.
+                format: uuid
                 type: string
               gatewayPoolID:
                 description: GatewayPoolID selects an Infisical gateway pool for token
                   review when gateway mode is used.
+                format: uuid
                 type: string
               identityRef:
                 description: IdentityRef references the InfisicalIdentity receiving
@@ -162,8 +164,15 @@ spec:
                   uses for token review.
                 maxLength: 255
                 type: string
+              templateID:
+                description: |-
+                  TemplateID selects an Infisical Kubernetes Auth template. When set, Infisical manages
+                  KubernetesHost, CACertSecretRef, TokenReviewerJWTSecretRef, TokenReviewMode, GatewayID,
+                  GatewayPoolID, and AllowedAudience from that template; those fields must be omitted.
+                format: uuid
+                minLength: 1
+                type: string
               tokenReviewMode:
-                default: api
                 description: TokenReviewMode selects the API-server or gateway token
                   review path.
                 enum:
@@ -197,10 +206,18 @@ spec:
             - identityRef
             type: object
             x-kubernetes-validations:
+            - message: templateID cannot be combined with template-managed Kubernetes
+                Auth settings
+              rule: '!has(self.templateID) || self.templateID == '''' || (self.kubernetesHost
+                == '''' && !has(self.caCertSecretRef) && !has(self.tokenReviewerJWTSecretRef)
+                && self.tokenReviewMode == '''' && self.gatewayID == '''' && self.gatewayPoolID
+                == '''' && self.allowedAudience == '''')'
             - message: connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
             - message: identityRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef'
+            - message: templateID is immutable; delete and recreate the InfisicalKubernetesAuth
+              rule: '!has(oldSelf.templateID) || self.templateID == oldSelf.templateID'
           status:
             description: Status defines the observed state of InfisicalKubernetesAuth.
             properties:
@@ -341,12 +358,21 @@ spec:
                   in status.
                 format: int64
                 type: integer
+              templateID:
+                description: TemplateID is the observed Infisical Kubernetes Auth
+                  template identifier.
+                type: string
               tokenReviewMode:
                 description: TokenReviewMode is the observed token review mode.
                 enum:
                 - api
                 - gateway
                 type: string
+              tokenReviewerJWTTemplateSourced:
+                description: |-
+                  TokenReviewerJWTTemplateSourced reports whether Infisical sources the reviewer JWT from the
+                  linked Kubernetes Auth template.
+                type: boolean
               verifyTLSCertificate:
                 description: VerifyTLSCertificate reports whether the Kubernetes API
                   certificate is verified.
