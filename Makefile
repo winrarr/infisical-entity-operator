@@ -188,7 +188,7 @@ deploy: manifests generate helm-lint ## Install or upgrade the operator Helm cha
 		--wait --timeout 5m
 
 .PHONY: deploy-e2e
-deploy-e2e: kind-install-cni install-committed kind-load-image helm-lint ## Install or upgrade the operator chart from committed artifacts for E2E.
+deploy-e2e: kind-install-cni install-committed kind-load-image ## Install or upgrade the operator chart from committed artifacts for E2E.
 	"$(HELM)" upgrade --install $(PROJECT_NAME) charts/infisical-entity-operator \
 		--namespace $(OPERATOR_NAMESPACE) --create-namespace \
 		--set image.repository=$$(echo $(IMG) | cut -d: -f1) \
