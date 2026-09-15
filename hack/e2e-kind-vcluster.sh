@@ -147,7 +147,7 @@ fi
 
 host_kubectl -n "${TEST_NAMESPACE}" create secret generic infisical-platform-token \
   --from-literal=token="${platform_token}" --dry-run=client -o yaml | host_kubectl apply -f - >/dev/null
-host_kubectl apply -f config/network-policy/allow-infisical-egress.yaml >/dev/null
+host_kubectl apply -f config/network-policy/allow-infisical-egress-network-policy.yaml >/dev/null
 host_kubectl -n "${OPERATOR_NAMESPACE}" wait --for=condition=available \
   deployment/infisical-entity-operator-infisical-entity-operator --timeout=5m >/dev/null
 

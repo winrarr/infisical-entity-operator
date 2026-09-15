@@ -15,6 +15,7 @@ KIND ?= $(LOCALBIN)/kind
 HELM ?= helm
 PROJECT_NAME ?= infisical-entity-operator
 KIND_CLUSTER ?= infisical-entity-operator
+KIND_CNI ?= default
 KIND_NODE_IMAGE ?= kindest/node:v1.37.0
 OPERATOR_NAMESPACE ?= infisical-entity-operator-system
 INFISICAL_NAMESPACE ?= infisical
@@ -187,15 +188,48 @@ undeploy: ## Uninstall the operator Helm release.
 ##@ Local Kind environment
 
 .PHONY: kind-up
-kind-up: kind-create kind-install-cilium kind-install-infisical ## Create a local Kind cluster with Cilium and Infisical.
+kind-up: kind-create kind-ensure-cni kind-install-cni kind-install-infisical ## Create a local Kind cluster with the selected CNI and Infisical.
 
 .PHONY: kind-create
 kind-create: kind ## Create the isolated Kind cluster if it does not exist.
-	@if ! "$(KIND)" get clusters | grep -Fxq "$(KIND_CLUSTER)"; then \
-		"$(KIND)" create cluster --name "$(KIND_CLUSTER)" --image "$(KIND_NODE_IMAGE)" --config hack/kind-configuration-cilium.yaml; \
+	@case "$(KIND_CNI)" in \
+		default) kind_config=hack/kind-configuration.yaml ;; \
+		cilium) kind_config=hack/kind-configuration-cilium.yaml ;; \
+		*) echo "Unsupported KIND_CNI=$(KIND_CNI); expected default or cilium" >&2; exit 1 ;; \
+	esac; \
+	if ! "$(KIND)" get clusters | grep -Fxq "$(KIND_CLUSTER)"; then \
+		"$(KIND)" create cluster --name "$(KIND_CLUSTER)" --image "$(KIND_NODE_IMAGE)" --config "$$kind_config"; \
 	else \
 		echo "Kind cluster $(KIND_CLUSTER) already exists"; \
 	fi
+
+.PHONY: kind-ensure-cni
+kind-ensure-cni: kind-create ## Verify the named Kind cluster uses the selected CNI.
+	@case "$(KIND_CNI)" in \
+		default) \
+			if "$(KUBECTL)" --context="kind-$(KIND_CLUSTER)" -n kube-system get daemonset kindnet >/dev/null 2>&1; then \
+				echo "Kind cluster $(KIND_CLUSTER) uses the default CNI"; \
+			else \
+				echo "Kind cluster $(KIND_CLUSTER) does not use the default CNI; run make kind-down before recreating it" >&2; \
+				exit 1; \
+			fi ;; \
+		cilium) \
+			if "$(KUBECTL)" --context="kind-$(KIND_CLUSTER)" -n kube-system get daemonset kindnet >/dev/null 2>&1; then \
+				echo "Kind cluster $(KIND_CLUSTER) uses the default CNI; run make kind-down before recreating it with Cilium" >&2; \
+				exit 1; \
+			else \
+				echo "Kind cluster $(KIND_CLUSTER) is configured for Cilium"; \
+			fi ;; \
+		*) echo "Unsupported KIND_CNI=$(KIND_CNI); expected default or cilium" >&2; exit 1 ;; \
+	esac
+
+.PHONY: kind-install-cni
+kind-install-cni: ## Install the selected CNI into Kind when required.
+	@case "$(KIND_CNI)" in \
+		default) echo "Using Kind's default CNI" ;; \
+		cilium) "$(MAKE)" kind-install-cilium ;; \
+		*) echo "Unsupported KIND_CNI=$(KIND_CNI); expected default or cilium" >&2; exit 1 ;; \
+	esac
 
 .PHONY: kind-install-cilium
 kind-install-cilium: ## Install the pinned Cilium release into Kind.
@@ -257,8 +291,8 @@ kind-load-image: ## Load IMG into the isolated Kind cluster.
 kind-refresh: docker-build kind-load-image deploy kind-restart ## Build, load, and restart the operator in Kind.
 
 .PHONY: kind-e2e
-kind-e2e: kind-deploy kind-restart ## Run the live Infisical reconciliation and network-policy test.
-	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" ./hack/e2e-kind.sh
+kind-e2e: kind-deploy kind-restart ## Run the live Infisical reconciliation test with the default Kind CNI.
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" E2E_NETWORKING=default-cni NETWORK_POLICY_FILE=config/network-policy/allow-infisical-egress-network-policy.yaml ./hack/e2e-kind.sh
 
 .PHONY: vcluster
 vcluster: ## Download the pinned vCluster CLI used by the virtual-cluster integration test.

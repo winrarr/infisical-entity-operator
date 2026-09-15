@@ -20,6 +20,6 @@ Run namespace-scoped deployments and narrower RBAC only after completing that ev
 
 ## Network and runtime posture
 
-The chart runs the manager as non-root with a read-only root filesystem, no privilege escalation, and all capabilities dropped. Network egress should be limited to the configured Infisical API and required Kubernetes API access. The [local Kind workflow](../operations/local-kind.md) demonstrates this with Cilium.
+The chart runs the manager as non-root with a read-only root filesystem, no privilege escalation, and all capabilities dropped. Network egress should be limited to the configured Infisical API and required Kubernetes API access. The [local Kind workflow](../operations/local-kind.md) provides the standard `NetworkPolicy` fixture and an optional Cilium setup for policy-enforcement scenarios.
 
 Avoid placing tokens in manifests committed to Git, controller logs, events, status, generated documentation, or support bundles.

@@ -5,9 +5,16 @@ KUBECTL=${KUBECTL:-kubectl}
 OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-infisical-entity-operator-system}
 INFISICAL_NAMESPACE=${INFISICAL_NAMESPACE:-infisical}
 TEST_NAMESPACE=${TEST_NAMESPACE:-infisical-entity-operator-e2e}
+E2E_NETWORKING=${E2E_NETWORKING:-default-cni}
+NETWORK_POLICY_FILE=${NETWORK_POLICY_FILE:-config/network-policy/allow-infisical-egress-network-policy.yaml}
 REVIEWER_SERVICE_ACCOUNT=${REVIEWER_SERVICE_ACCOUNT:-infisical-auth-reviewer}
 REVIEWER_BINDING=${REVIEWER_BINDING:-infisical-auth-reviewer}
 port_forward_pid=""
+
+if [[ ! -f "${NETWORK_POLICY_FILE}" ]]; then
+  echo "Network policy manifest does not exist: ${NETWORK_POLICY_FILE}" >&2
+  exit 1
+fi
 
 cleanup() {
   if [[ -n "${port_forward_pid}" ]]; then
@@ -92,7 +99,7 @@ fi
 "${KUBECTL}" -n "${TEST_NAMESPACE}" create serviceaccount e2e-disallowed \
   --dry-run=client -o yaml | "${KUBECTL}" apply -f - >/dev/null
 
-"${KUBECTL}" apply -f config/network-policy/allow-infisical-egress.yaml >/dev/null
+"${KUBECTL}" apply -f "${NETWORK_POLICY_FILE}" >/dev/null
 "${KUBECTL}" -n "${OPERATOR_NAMESPACE}" wait --for=condition=available \
   deployment/infisical-entity-operator-infisical-entity-operator --timeout=5m >/dev/null
 
@@ -121,7 +128,7 @@ spec:
     - no-access
   metadata:
     - key: test
-      value: kind-cilium
+      value: ${E2E_NETWORKING}
   creationPolicy: Create
   deletionPolicy: Delete
 ---
@@ -390,7 +397,7 @@ if [[ "${kubernetes_auth_available}" == true ]]; then
   fi
 fi
 
-echo "Live reconciliation succeeded through the Cilium egress policy"
+echo "Live reconciliation succeeded with ${E2E_NETWORKING} and ${NETWORK_POLICY_FILE}"
 echo "Project status ID: ${project_id}"
 echo "Identity status ID: ${identity_id}"
 echo "Environment status ID: ${environment_id}"
