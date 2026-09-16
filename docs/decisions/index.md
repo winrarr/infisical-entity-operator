@@ -7,3 +7,4 @@
 - [0006: Use organization-scoped identities for tenant principals](0006-organization-scoped-identities-for-tenant-principals.md)
 - [0007: Make Infisical organizations explicit tenant boundaries](0007-explicit-organization-tenant-boundaries.md)
 - [0008: Keep identity authentication free-tier and credential-safe](0008-free-tier-identity-authentication.md)
+- [0009: Keep live tests narrow and lifecycle tests local](0009-test-pyramid.md)

@@ -69,6 +69,8 @@ const (
 	testMemberRole                   = "member"
 	testProjectsPath                 = "/api/v1/projects"
 	testProjectByIDPath              = "/api/v1/projects/project-1"
+	testEnvironmentID                = "environment-1"
+	testEnvironmentByIDPath          = "/api/v1/projects/project-1/environments/environment-1"
 	testTenantOrganizationName       = "tenant-org"
 	testConfigurationInvalidReason   = "ConfigurationInvalid"
 )
@@ -565,12 +567,14 @@ func TestOrganizationReconcilerAdoptsWithMachineIdentityProjectVisibility(t *tes
 }
 
 func TestProjectReconcilerCreatesAndUpdatesProject(t *testing.T) {
+	patchRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == testProjectsPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","environments":[]}}`))
 		case request.Method == http.MethodPatch && request.URL.Path == testProjectByIDPath:
+			patchRequests++
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","description":"updated","environments":[{"id":"env-1","name":"Production","slug":"prod"}]}}`))
 		case request.Method == http.MethodGet && request.URL.Path == testProjectByIDPath:
 			_, _ = writer.Write([]byte(`{"project":{"id":"project-1","name":"demo","slug":"demo-project","orgId":"org-1","environments":[{"id":"env-1","name":"Production","slug":"prod"}]}}`))
@@ -623,6 +627,9 @@ func TestProjectReconcilerCreatesAndUpdatesProject(t *testing.T) {
 	}
 	if _, err := reconciler.Reconcile(context.Background(), request); err != nil {
 		t.Fatalf("reconcile project drift: %v", err)
+	}
+	if patchRequests != 1 {
+		t.Fatalf("expected one project drift patch, got %d", patchRequests)
 	}
 }
 
@@ -1060,7 +1067,7 @@ func TestEnvironmentReconcilerWaitsForProjectThenCreatesEnvironment(t *testing.T
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/environments":
 			_, _ = writer.Write([]byte(`{"environment":{"id":"environment-1","name":"QA","slug":"qa","position":4,"projectId":"project-1"}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/environments/environment-1":
+		case request.Method == http.MethodGet && request.URL.Path == testEnvironmentByIDPath:
 			_, _ = writer.Write([]byte(`{"environment":{"id":"environment-1","name":"QA","slug":"qa","position":4,"projectId":"project-1"}}`))
 		default:
 			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
@@ -1095,7 +1102,7 @@ func TestEnvironmentReconcilerWaitsForProjectThenCreatesEnvironment(t *testing.T
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(environment), &observed); err != nil {
 		t.Fatalf("get environment: %v", err)
 	}
-	if observed.Status.EnvironmentID != "environment-1" || observed.Status.ProjectID != testProjectID || observed.Status.Slug != "qa" {
+	if observed.Status.EnvironmentID != testEnvironmentID || observed.Status.ProjectID != testProjectID || observed.Status.Slug != "qa" {
 		t.Fatalf("unexpected environment status: %#v", observed.Status)
 	}
 	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
@@ -1112,7 +1119,7 @@ func TestEnvironmentReconcilerRestoresSoftDeletedEnvironment(t *testing.T) {
 			_, _ = writer.Write([]byte(`{"environment":{"id":"environment-1","name":"QA","slug":"qa","position":4,"projectId":"project-1","softDeletedAt":"2026-09-09T12:00:00Z"}}`))
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/environments/environment-1/restore":
 			_, _ = writer.Write([]byte(`{"environment":{"id":"environment-1","name":"QA","slug":"qa","position":4,"projectId":"project-1"}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/environments/environment-1":
+		case request.Method == http.MethodGet && request.URL.Path == testEnvironmentByIDPath:
 			_, _ = writer.Write([]byte(`{"environment":{"id":"environment-1","name":"QA","slug":"qa","position":4,"projectId":"project-1"}}`))
 		default:
 			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)
@@ -1146,7 +1153,7 @@ func TestEnvironmentReconcilerRestoresSoftDeletedEnvironment(t *testing.T) {
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(environment), &observed); err != nil {
 		t.Fatalf("get environment: %v", err)
 	}
-	if observed.Status.EnvironmentID != "environment-1" || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
+	if observed.Status.EnvironmentID != testEnvironmentID || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected restored environment to be Ready, got %#v", observed.Status)
 	}
 	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
