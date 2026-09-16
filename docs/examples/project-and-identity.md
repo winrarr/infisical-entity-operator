@@ -24,25 +24,6 @@ spec:
     name: payments
   environmentName: Production
   slug: production
----
-apiVersion: infisical.infisical-operator.io/v1alpha1
-kind: InfisicalProjectRole
-metadata:
-  name: payments-secret-reader
-spec:
-  connectionRef:
-    name: infisical
-  projectRef:
-    name: payments
-  roleName: Payments Secret Reader
-  slug: payments-secret-reader
-  permissions:
-    - subject: secrets
-      action: [readValue]
-      conditions:
-        environment:
-          $eq: production
----
 apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalIdentity
 metadata:
@@ -54,12 +35,12 @@ spec:
     name: payments
   identityName: payments-workload
   roleSlugs:
-    - payments-secret-reader
+    - viewer
 ```
 
 Apply the document and watch the dependency graph converge:
 
 ```sh
 kubectl apply -n NAMESPACE -f project-and-identity.yaml
-kubectl get -n NAMESPACE infisicalproject,infisicalenvironment,infisicalprojectrole,infisicalidentity
+kubectl get -n NAMESPACE infisicalproject,infisicalenvironment,infisicalidentity
 ```

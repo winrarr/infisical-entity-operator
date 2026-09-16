@@ -2,17 +2,17 @@
 
 This register contains material shortcomings that are known in the current implementation and intentionally remain unresolved. It is not a list of style preferences or hypothetical enhancements. Planned product outcomes belong in the [backlog](backlog.md); entries here should have concrete evidence and exit criteria.
 
-## TD-001: Complete live acceptance for project roles and Kubernetes Auth
+## TD-001: Complete free-tier live acceptance for Kubernetes Auth
 
-Status: accepted limitation
+Status: local run is bounded by the standalone chart’s network policy; external run pending
 
 ### Evidence
 
-The default Kind environment uses the standalone Infisical chart. Its local plan rejects custom project roles, and its API rejects the cluster-local Kubernetes token-review URL. The e2e script verifies those bounded error paths and successfully exercises built-in `no-access` identity membership, while the HTTP contract tests cover successful custom-role-controller/client behavior. The default local run cannot prove successful live `InfisicalProjectRole` creation or Kubernetes Auth login.
+The default Kind environment uses the standalone Infisical chart. It successfully exercises the free-tier project, environment, organization, identity, built-in role membership, and Universal Auth paths. Its API rejects the cluster-local Kubernetes token-review URL, so the e2e script records that bounded environment limitation and skips the login assertion.
 
 ### Impact
 
-The most important end-to-end acceptance paths for two CRDs depend on an Infisical deployment with a suitable plan and reachable token-review endpoint. Regressions that occur only in the live role or authentication integration could therefore escape the default local e2e run.
+The Kubernetes Auth login path still needs an end-to-end run against a free-tier Infisical deployment with a token-review endpoint reachable from Infisical. Regressions that occur only in that networked integration could therefore escape the default local e2e run.
 
 ### Constraints
 
@@ -22,7 +22,7 @@ The most important end-to-end acceptance paths for two CRDs depend on an Infisic
 
 ### Exit criteria
 
-Add a separately provisioned live test target or CI environment that can create an `InfisicalProjectRole` and complete allowed/disallowed `InfisicalKubernetesAuth` login checks, then document its credentials and network boundary without storing secrets in the repository.
+Run the Kubernetes Auth acceptance against a free-tier Infisical deployment and a reachable Kubernetes API, then record a successful allowed/disallowed login result. Keep credentials, kubeconfig, CA data, and reviewer tokens outside the repository and document the environment’s network boundary.
 
 ## TD-005: Cluster-wide manager remains a trusted deployment
 

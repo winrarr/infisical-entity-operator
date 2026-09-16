@@ -25,7 +25,7 @@ CI uses the same repository commands: the test workflow checks generated output 
 
 ## kstatus compatibility
 
-All ten CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
+All seven CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
 
 See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md) for the external interpretation.
 
@@ -33,9 +33,9 @@ See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-u
 
 Unit and HTTP contract tests use fake Kubernetes clients and `httptest` servers. They prove request construction, response decoding, dependency handling, status transitions, drift correction, finalizers, and error classification without requiring a live Infisical account.
 
-The default-CNI Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, application of the standard egress policy manifest, and live project, environment, organization-scoped identity, and built-in `no-access` project-membership reconciliation. It does not prove NetworkPolicy enforcement because that depends on the CNI. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference. The default standalone Infisical chart can reject project templates and custom project roles because of its plan and can reject the cluster-local Kubernetes review URL because of its URL policy. The script records those exact known conditions and continues; it does not claim successful `InfisicalProjectTemplate`, custom `InfisicalProjectRole`, or Kubernetes Auth creation in that configuration.
+The default-CNI Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, application of the standard egress policy manifest, and live free-tier project, environment, organization-scoped identity, built-in role membership, and Universal Auth reconciliation. It does not prove NetworkPolicy enforcement because that depends on the CNI. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference. The standalone local Infisical chart may reject the cluster-local Kubernetes review URL because of its URL policy; the script records that known environment limitation and continues.
 
-Kubernetes Auth allow/deny login checks run only when the live API accepts the configured review endpoint. The token-review JWT and CA data used by the test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
+Kubernetes Auth allow/deny login checks run only when the local API accepts the configured review endpoint. The token-review JWT and CA data used by the test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
 
 ## Generated output and repository hygiene
 

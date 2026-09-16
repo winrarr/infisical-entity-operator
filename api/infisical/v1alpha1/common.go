@@ -35,17 +35,15 @@ const (
 	DeletionPolicyOrphan DeletionPolicy = "Orphan"
 )
 
-// ProjectType is an Infisical product type.
-// +kubebuilder:validation:Enum=secret-manager;cert-manager;kms;secret-scanning;pam;agent-vault
+// ProjectType is an Infisical product type supported by the Infisical free plans.
+// Secret Manager is available in the core free plan and Certificate Manager has
+// a separate free plan with its documented certificate and CA limits.
+// +kubebuilder:validation:Enum=secret-manager;cert-manager
 type ProjectType string
 
 const (
-	ProjectTypeSecretManager  ProjectType = "secret-manager"
-	ProjectTypeCertManager    ProjectType = "cert-manager"
-	ProjectTypeKMS            ProjectType = "kms"
-	ProjectTypeSecretScanning ProjectType = "secret-scanning"
-	ProjectTypePAM            ProjectType = "pam"
-	ProjectTypeAgentVault     ProjectType = "agent-vault"
+	ProjectTypeSecretManager ProjectType = "secret-manager"
+	ProjectTypeCertManager   ProjectType = "cert-manager"
 )
 
 // SecretKeyReference identifies a key in a same-namespace Secret.

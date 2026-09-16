@@ -19,12 +19,12 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // KubernetesTokenReviewMode selects how Infisical validates Kubernetes service account tokens.
-// +kubebuilder:validation:Enum=api;gateway
+// The API-server mode is the only Kubernetes Auth mode supported by this free-tier API.
+// +kubebuilder:validation:Enum=api
 type KubernetesTokenReviewMode string
 
 const (
-	KubernetesTokenReviewModeAPI     KubernetesTokenReviewMode = "api"
-	KubernetesTokenReviewModeGateway KubernetesTokenReviewMode = "gateway"
+	KubernetesTokenReviewModeAPI KubernetesTokenReviewMode = "api"
 )
 
 // KubernetesTrustedIP identifies an IP address or CIDR range allowed to use an access token.
@@ -34,10 +34,8 @@ type KubernetesTrustedIP struct {
 	IPAddress string `json:"ipAddress"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!has(self.templateRef) || (self.kubernetesHost == '' && !has(self.caCertSecretRef) && !has(self.tokenReviewerJWTSecretRef) && self.tokenReviewMode == '' && self.gatewayID == '' && self.gatewayPoolID == '' && self.allowedAudience == '')",message="templateRef cannot be combined with template-managed Kubernetes Auth settings"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef",message="identityRef is immutable; delete and recreate the InfisicalKubernetesAuth"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.templateRef) || self.templateRef == oldSelf.templateRef",message="templateRef is immutable; delete and recreate the InfisicalKubernetesAuth"
 
 // InfisicalKubernetesAuthSpec defines the desired state of Infisical Kubernetes Auth.
 type InfisicalKubernetesAuthSpec struct {
@@ -46,12 +44,6 @@ type InfisicalKubernetesAuthSpec struct {
 
 	// IdentityRef references the InfisicalIdentity receiving this auth method.
 	IdentityRef LocalObjectReference `json:"identityRef"`
-
-	// TemplateRef selects a managed Infisical Kubernetes Auth template. When set, Infisical manages
-	// KubernetesHost, CACertSecretRef, TokenReviewerJWTSecretRef, TokenReviewMode, GatewayID,
-	// GatewayPoolID, and AllowedAudience from that template; those fields must be omitted.
-	// +optional
-	TemplateRef *LocalObjectReference `json:"templateRef,omitempty"`
 
 	// KubernetesHost is the Kubernetes API server URL Infisical uses for token review.
 	// +optional
@@ -86,20 +78,10 @@ type InfisicalKubernetesAuthSpec struct {
 	// +optional
 	TokenReviewerJWTSecretRef *SecretKeyReference `json:"tokenReviewerJWTSecretRef,omitempty"`
 
-	// TokenReviewMode selects the API-server or gateway token review path.
+	// TokenReviewMode selects the API-server token review path.
 	// +optional
-	// +kubebuilder:validation:Enum=api;gateway
+	// +kubebuilder:validation:Enum=api
 	TokenReviewMode KubernetesTokenReviewMode `json:"tokenReviewMode,omitempty"`
-
-	// GatewayID selects an Infisical gateway for token review when gateway mode is used.
-	// +optional
-	// +kubebuilder:validation:Format=uuid
-	GatewayID string `json:"gatewayID,omitempty"`
-
-	// GatewayPoolID selects an Infisical gateway pool for token review when gateway mode is used.
-	// +optional
-	// +kubebuilder:validation:Format=uuid
-	GatewayPoolID string `json:"gatewayPoolID,omitempty"`
 
 	// AccessTokenTrustedIPs limits where issued access tokens may be used.
 	// +optional
@@ -144,9 +126,6 @@ type InfisicalKubernetesAuthStatus struct {
 	// IdentityID is the observed target identity identifier.
 	IdentityID string `json:"identityID,omitempty"`
 
-	// TemplateID is the observed Infisical Kubernetes Auth template identifier.
-	TemplateID string `json:"templateID,omitempty"`
-
 	// KubernetesHost is the observed Kubernetes API server URL.
 	KubernetesHost string `json:"kubernetesHost,omitempty"`
 
@@ -164,12 +143,6 @@ type InfisicalKubernetesAuthStatus struct {
 	// TokenReviewMode is the observed token review mode.
 	TokenReviewMode KubernetesTokenReviewMode `json:"tokenReviewMode,omitempty"`
 
-	// GatewayID is the observed gateway identifier.
-	GatewayID string `json:"gatewayID,omitempty"`
-
-	// GatewayPoolID is the observed gateway pool identifier.
-	GatewayPoolID string `json:"gatewayPoolID,omitempty"`
-
 	// VerifyTLSCertificate reports whether the Kubernetes API certificate is verified.
 	VerifyTLSCertificate bool `json:"verifyTLSCertificate,omitempty"`
 
@@ -178,10 +151,6 @@ type InfisicalKubernetesAuthStatus struct {
 
 	// HasTokenReviewerJWT reports whether a reviewer JWT is configured without exposing it.
 	HasTokenReviewerJWT bool `json:"hasTokenReviewerJWT,omitempty"`
-
-	// TokenReviewerJWTTemplateSourced reports whether Infisical sources the reviewer JWT from the
-	// linked Kubernetes Auth template.
-	TokenReviewerJWTTemplateSourced bool `json:"tokenReviewerJWTTemplateSourced,omitempty"`
 
 	// AccessTokenTrustedIPs is the observed access token IP allowlist.
 	// +listType=atomic

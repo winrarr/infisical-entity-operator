@@ -112,9 +112,13 @@ spec:
                 type: object
               organizationRole:
                 description: |-
-                  OrganizationRole is the Infisical organization role for an organization-scoped identity.
+                  OrganizationRole is the built-in Infisical organization role for an organization-scoped identity.
                   Leave it empty to use Infisical's least-privilege no-access role. Project-scoped identities
                   must omit this field.
+                enum:
+                - admin
+                - member
+                - no-access
                 minLength: 1
                 type: string
               projectRef:
@@ -164,7 +168,7 @@ spec:
                 x-kubernetes-list-type: atomic
               roleSlugs:
                 description: |-
-                  RoleSlugs declares the permanent project role slugs assigned to the identity.
+                  RoleSlugs declares the permanent built-in project role slugs assigned to the identity.
                   When omitted, the existing project membership is not managed. Use no-access
                   explicitly when the identity should have no project permissions.
                 items:
@@ -320,14 +324,14 @@ spec:
                               the assignment as temporary.
                             type: boolean
                           name:
-                            description: Name is the custom role display name when
+                            description: Name is the observed project role name when
                               available.
                             type: string
                           roleID:
                             description: RoleID is the Infisical role assignment identifier.
                             type: string
                           slug:
-                            description: Slug is the built-in or custom role slug.
+                            description: Slug is the observed project role slug.
                             type: string
                         type: object
                       type: array
@@ -347,13 +351,13 @@ spec:
                         assignment as temporary.
                       type: boolean
                     name:
-                      description: Name is the custom role display name when available.
+                      description: Name is the observed project role name when available.
                       type: string
                     roleID:
                       description: RoleID is the Infisical role assignment identifier.
                       type: string
                     slug:
-                      description: Slug is the built-in or custom role slug.
+                      description: Slug is the observed project role slug.
                       type: string
                   type: object
                 type: array

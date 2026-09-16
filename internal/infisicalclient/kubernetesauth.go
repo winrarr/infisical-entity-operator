@@ -30,29 +30,24 @@ type TrustedIP struct {
 
 // KubernetesAuth is an Infisical Kubernetes Auth configuration.
 type KubernetesAuth struct {
-	ID                              string      `json:"id"`
-	IdentityID                      string      `json:"identityId"`
-	TemplateID                      string      `json:"templateId"`
-	KubernetesHost                  string      `json:"kubernetesHost"`
-	AllowedNamespaces               string      `json:"allowedNamespaces"`
-	AllowedNames                    string      `json:"allowedNames"`
-	AllowedAudience                 string      `json:"allowedAudience"`
-	TokenReviewMode                 string      `json:"tokenReviewMode"`
-	GatewayID                       string      `json:"gatewayId"`
-	GatewayPoolID                   string      `json:"gatewayPoolId"`
-	VerifyTLSCertificate            bool        `json:"verifyTlsCertificate"`
-	CACert                          string      `json:"caCert"`
-	TokenReviewerJWT                string      `json:"tokenReviewerJwt"`
-	TokenReviewerJWTTemplateSourced bool        `json:"isTokenReviewerJwtTemplateSourced"`
-	AccessTokenTrustedIPs           []TrustedIP `json:"accessTokenTrustedIps"`
-	AccessTokenTTL                  int64       `json:"accessTokenTTL"`
-	AccessTokenMaxTTL               int64       `json:"accessTokenMaxTTL"`
-	AccessTokenNumUsesLimit         int64       `json:"accessTokenNumUsesLimit"`
+	ID                      string      `json:"id"`
+	IdentityID              string      `json:"identityId"`
+	KubernetesHost          string      `json:"kubernetesHost"`
+	AllowedNamespaces       string      `json:"allowedNamespaces"`
+	AllowedNames            string      `json:"allowedNames"`
+	AllowedAudience         string      `json:"allowedAudience"`
+	TokenReviewMode         string      `json:"tokenReviewMode"`
+	VerifyTLSCertificate    bool        `json:"verifyTlsCertificate"`
+	CACert                  string      `json:"caCert"`
+	TokenReviewerJWT        string      `json:"tokenReviewerJwt"`
+	AccessTokenTrustedIPs   []TrustedIP `json:"accessTokenTrustedIps"`
+	AccessTokenTTL          int64       `json:"accessTokenTTL"`
+	AccessTokenMaxTTL       int64       `json:"accessTokenMaxTTL"`
+	AccessTokenNumUsesLimit int64       `json:"accessTokenNumUsesLimit"`
 }
 
 // CreateKubernetesAuthRequest is the supported Kubernetes Auth attach surface.
 type CreateKubernetesAuthRequest struct {
-	TemplateID              string      `json:"templateId,omitempty"`
 	KubernetesHost          string      `json:"kubernetesHost,omitempty"`
 	CACert                  string      `json:"caCert,omitempty"`
 	VerifyTLSCertificate    *bool       `json:"verifyTlsCertificate,omitempty"`
@@ -61,8 +56,6 @@ type CreateKubernetesAuthRequest struct {
 	AllowedNamespaces       string      `json:"allowedNamespaces"`
 	AllowedNames            string      `json:"allowedNames"`
 	AllowedAudience         string      `json:"allowedAudience,omitempty"`
-	GatewayID               string      `json:"gatewayId,omitempty"`
-	GatewayPoolID           string      `json:"gatewayPoolId,omitempty"`
 	AccessTokenTrustedIPs   []TrustedIP `json:"accessTokenTrustedIps,omitempty"`
 	AccessTokenTTL          *int64      `json:"accessTokenTTL,omitempty"`
 	AccessTokenMaxTTL       *int64      `json:"accessTokenMaxTTL,omitempty"`
@@ -71,7 +64,6 @@ type CreateKubernetesAuthRequest struct {
 
 // KubernetesAuthPatch contains optional mutable Kubernetes Auth fields.
 type KubernetesAuthPatch struct {
-	TemplateID              *string      `json:"templateId,omitempty"`
 	KubernetesHost          *string      `json:"kubernetesHost,omitempty"`
 	CACert                  *string      `json:"caCert,omitempty"`
 	VerifyTLSCertificate    *bool        `json:"verifyTlsCertificate,omitempty"`
@@ -80,8 +72,6 @@ type KubernetesAuthPatch struct {
 	AllowedNamespaces       *string      `json:"allowedNamespaces,omitempty"`
 	AllowedNames            *string      `json:"allowedNames,omitempty"`
 	AllowedAudience         *string      `json:"allowedAudience,omitempty"`
-	GatewayID               *string      `json:"gatewayId,omitempty"`
-	GatewayPoolID           *string      `json:"gatewayPoolId,omitempty"`
 	AccessTokenTrustedIPs   *[]TrustedIP `json:"accessTokenTrustedIps,omitempty"`
 	AccessTokenTTL          *int64       `json:"accessTokenTTL,omitempty"`
 	AccessTokenMaxTTL       *int64       `json:"accessTokenMaxTTL,omitempty"`

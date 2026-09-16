@@ -46,6 +46,7 @@ DOCKER_BUILD_CACHE_ARGS ?=
 GO := GOTOOLCHAIN=$(GO_TOOLCHAIN) go
 GOFMT = $(shell GOTOOLCHAIN=$(GO_TOOLCHAIN) go env GOROOT)/bin/gofmt
 
+
 .PHONY: all
 all: check build ## Run the default verification and build workflow.
 
@@ -358,6 +359,7 @@ kind-restart: ## Restart the operator after loading a mutable local image tag.
 .PHONY: kind-down
 kind-down: ## Delete only the isolated Kind cluster.
 	"$(KIND)" delete cluster --name "$(KIND_CLUSTER)"
+
 
 ##@ Dependencies
 

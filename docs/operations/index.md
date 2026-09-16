@@ -1,6 +1,6 @@
 # Operations
 
-The repository includes one reproducible operational environment:
+The repository includes one primary operational path:
 
 - [Local Kind](local-kind.md) creates an isolated Kind cluster with Infisical, the operator, and fast default-CNI reconciliation checks; Cilium is available for local scenarios that require it.
 

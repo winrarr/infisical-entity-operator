@@ -37,11 +37,13 @@ import (
 )
 
 const (
-	finalizerName       = "infisical.infisical-operator.io/finalizer"
-	dependencyRetry     = 15 * time.Second
-	externalRetry       = 30 * time.Second
-	driftDetectionEvery = 2 * time.Minute
-	readyCondition      = "Ready"
+	finalizerName         = "infisical.infisical-operator.io/finalizer"
+	dependencyRetry       = 15 * time.Second
+	externalRetry         = 30 * time.Second
+	driftDetectionEvery   = 2 * time.Minute
+	readyCondition        = "Ready"
+	infisicalAdminRole    = "admin"
+	infisicalNoAccessRole = "no-access"
 )
 
 type dependencyError struct {
@@ -268,129 +270,11 @@ func environmentSlug(environment *infisicalv1alpha1.InfisicalEnvironment) string
 	return environment.Name
 }
 
-func projectRoleName(role *infisicalv1alpha1.InfisicalProjectRole) string {
-	if role.Spec.RoleName != "" {
-		return role.Spec.RoleName
-	}
-	return role.Name
-}
-
-func projectRoleSlug(role *infisicalv1alpha1.InfisicalProjectRole) string {
-	if role.Spec.Slug != "" {
-		return role.Spec.Slug
-	}
-	return role.Name
-}
-
-func projectRolePermissionsFrom(spec []infisicalv1alpha1.ProjectRolePermission) []infisicalclient.ProjectRolePermission {
-	permissions := make([]infisicalclient.ProjectRolePermission, 0, len(spec))
-	for _, permission := range spec {
-		permissions = append(permissions, infisicalclient.ProjectRolePermission{
-			Subject:    string(permission.Subject),
-			Action:     projectRoleActionsFrom(permission.Action),
-			Inverted:   boolValue(permission.Inverted, false),
-			Conditions: projectRoleConditionsFrom(permission.Conditions),
-		})
-	}
-	return permissions
-}
-
-func projectRoleConditionsFrom(conditions *infisicalv1alpha1.ProjectRoleConditions) *infisicalclient.ProjectRoleConditions {
-	if conditions == nil {
-		return nil
-	}
-	return &infisicalclient.ProjectRoleConditions{
-		Environment: projectRoleStringConditionFrom(conditions.Environment),
-		SecretPath:  projectRoleStringConditionFrom(conditions.SecretPath),
-		SecretName:  projectRoleStringConditionFrom(conditions.SecretName),
-		SecretTags:  projectRoleSecretTagsConditionFrom(conditions.SecretTags),
-		EventType:   projectRoleStringConditionFrom(conditions.EventType),
-	}
-}
-
-func projectRoleStringConditionFrom(condition *infisicalv1alpha1.ProjectRoleStringCondition) *infisicalclient.ProjectRoleStringCondition {
-	if condition == nil {
-		return nil
-	}
-	return &infisicalclient.ProjectRoleStringCondition{Eq: condition.Eq, Ne: condition.Ne, In: condition.In, Glob: condition.Glob}
-}
-
-func projectRoleSecretTagsConditionFrom(condition *infisicalv1alpha1.ProjectRoleSecretTagsCondition) *infisicalclient.ProjectRoleSecretTagsCondition {
-	if condition == nil {
-		return nil
-	}
-	return &infisicalclient.ProjectRoleSecretTagsCondition{In: condition.In, All: condition.All}
-}
-
-func projectRolePermissionsTo(permissions []infisicalclient.ProjectRolePermission) []infisicalv1alpha1.ProjectRolePermission {
-	result := make([]infisicalv1alpha1.ProjectRolePermission, 0, len(permissions))
-	for _, permission := range permissions {
-		inverted := permission.Inverted
-		result = append(result, infisicalv1alpha1.ProjectRolePermission{
-			Subject:    infisicalv1alpha1.ProjectRoleSubject(permission.Subject),
-			Action:     projectRoleActionsTo(permission.Action),
-			Inverted:   &inverted,
-			Conditions: projectRoleConditionsTo(permission.Conditions),
-		})
-	}
-	return result
-}
-
-func projectRoleActionsFrom(actions []infisicalv1alpha1.ProjectRoleAction) infisicalclient.ProjectRoleActions {
-	result := make(infisicalclient.ProjectRoleActions, 0, len(actions))
-	for _, action := range actions {
-		result = append(result, string(action))
-	}
-	return result
-}
-
-func projectRoleActionsTo(actions infisicalclient.ProjectRoleActions) []infisicalv1alpha1.ProjectRoleAction {
-	result := make([]infisicalv1alpha1.ProjectRoleAction, 0, len(actions))
-	for _, action := range actions {
-		result = append(result, infisicalv1alpha1.ProjectRoleAction(action))
-	}
-	return result
-}
-
-func projectRoleConditionsTo(conditions *infisicalclient.ProjectRoleConditions) *infisicalv1alpha1.ProjectRoleConditions {
-	if conditions == nil {
-		return nil
-	}
-	return &infisicalv1alpha1.ProjectRoleConditions{
-		Environment: projectRoleStringConditionTo(conditions.Environment),
-		SecretPath:  projectRoleStringConditionTo(conditions.SecretPath),
-		SecretName:  projectRoleStringConditionTo(conditions.SecretName),
-		SecretTags:  projectRoleSecretTagsConditionTo(conditions.SecretTags),
-		EventType:   projectRoleStringConditionTo(conditions.EventType),
-	}
-}
-
-func projectRoleStringConditionTo(condition *infisicalclient.ProjectRoleStringCondition) *infisicalv1alpha1.ProjectRoleStringCondition {
-	if condition == nil {
-		return nil
-	}
-	return &infisicalv1alpha1.ProjectRoleStringCondition{Eq: condition.Eq, Ne: condition.Ne, In: condition.In, Glob: condition.Glob}
-}
-
-func projectRoleSecretTagsConditionTo(condition *infisicalclient.ProjectRoleSecretTagsCondition) *infisicalv1alpha1.ProjectRoleSecretTagsCondition {
-	if condition == nil {
-		return nil
-	}
-	return &infisicalv1alpha1.ProjectRoleSecretTagsCondition{In: condition.In, All: condition.All}
-}
-
 func boolValue(value *bool, defaultValue bool) bool {
 	if value == nil {
 		return defaultValue
 	}
 	return *value
-}
-
-func stringPointerIfSet(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }
 
 func projectStatusFrom(project *infisicalclient.Project) (string, string, string, []infisicalv1alpha1.EnvironmentStatus) {
@@ -453,6 +337,11 @@ func identityRoleSlugs(spec []string) ([]string, error) {
 		if strings.TrimSpace(slug) == "" {
 			return nil, errors.New("roleSlugs cannot contain an empty value")
 		}
+		switch slug {
+		case infisicalAdminRole, "member", "viewer", infisicalNoAccessRole:
+		default:
+			return nil, fmt.Errorf("project role %q is not a built-in free-tier role; custom roles are not supported", slug)
+		}
 		if _, exists := seen[slug]; exists {
 			return nil, fmt.Errorf("roleSlugs contains duplicate value %q", slug)
 		}
@@ -460,15 +349,6 @@ func identityRoleSlugs(spec []string) ([]string, error) {
 	}
 	sort.Strings(roleSlugs)
 	return roleSlugs, nil
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func identityRoleSlugsEqual(want []string, current []infisicalclient.IdentityMembershipRole) bool {

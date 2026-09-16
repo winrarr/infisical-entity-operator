@@ -146,8 +146,8 @@ spec:
         - ${OWNER_ROLE}
 EOF
 
-host_kubectl wait --for=jsonpath='{.status.state}'=Active tenant/${TENANT_A} --timeout=5m >/dev/null
-host_kubectl wait --for=jsonpath='{.status.state}'=Active tenant/${TENANT_B} --timeout=5m >/dev/null
+host_kubectl wait --for=jsonpath='{.status.state}'=Active "tenant/${TENANT_A}" --timeout=5m >/dev/null
+host_kubectl wait --for=jsonpath='{.status.state}'=Active "tenant/${TENANT_B}" --timeout=5m >/dev/null
 
 tenant_a_uid="$(host_kubectl get tenant "${TENANT_A}" -o jsonpath='{.metadata.uid}')"
 tenant_b_uid="$(host_kubectl get tenant "${TENANT_B}" -o jsonpath='{.metadata.uid}')"
@@ -187,7 +187,7 @@ EOF
 host_kubectl -n "${NAMESPACE_A}" create serviceaccount "${OWNER_A}" >/dev/null
 host_kubectl -n "${NAMESPACE_B}" create serviceaccount "${OWNER_B}" >/dev/null
 
-host_kubectl -n "${INFISICAL_NAMESPACE}" port-forward service/${INFISICAL_SERVICE} 18082:8080 >/dev/null 2>&1 &
+host_kubectl -n "${INFISICAL_NAMESPACE}" port-forward "service/${INFISICAL_SERVICE}" 18082:8080 >/dev/null 2>&1 &
 port_forward_pid=$!
 port_forward_ready=false
 for _ in {1..60}; do
@@ -332,7 +332,6 @@ spec:
                 - InfisicalEnvironment
                 - InfisicalIdentity
                 - InfisicalKubernetesAuth
-                - InfisicalProjectRole
               namespaceSelector:
                 matchLabels:
                   capsule.clastix.io/tenant: ${TENANT_A}
@@ -401,7 +400,6 @@ spec:
                 - InfisicalEnvironment
                 - InfisicalIdentity
                 - InfisicalKubernetesAuth
-                - InfisicalProjectRole
               namespaceSelector:
                 matchLabels:
                   capsule.clastix.io/tenant: ${TENANT_B}
