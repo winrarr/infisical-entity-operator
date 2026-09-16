@@ -7,9 +7,11 @@ resources:
 - bases/infisical.infisical-operator.io_infisicalprojects.yaml
 - bases/infisical.infisical-operator.io_infisicalprojecttemplates.yaml
 - bases/infisical.infisical-operator.io_infisicalidentities.yaml
+- bases/infisical.infisical-operator.io_infisicalidentitytemplates.yaml
 - bases/infisical.infisical-operator.io_infisicalenvironments.yaml
 - bases/infisical.infisical-operator.io_infisicalkubernetesauths.yaml
 - bases/infisical.infisical-operator.io_infisicalprojectroles.yaml
+- bases/infisical.infisical-operator.io_infisicaluniversalauths.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

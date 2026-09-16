@@ -18,7 +18,7 @@ Controller manager ── bearer-token HTTP ──▶ Infisical API
     └── InfisicalKubernetesAuth: Kubernetes service-account authentication configuration
 ```
 
-The manager uses controller-runtime for caching, reconciliation, status subresources, and finalizer updates. The external integration is a narrow typed HTTP client rather than a broad abstraction: its public surface mirrors only the organization, project, project-template, environment, project-role, project-identity, organization-identity, project-membership, and Kubernetes Auth endpoints used by the controllers.
+The manager uses controller-runtime for caching, reconciliation, status subresources, and finalizer updates. The external integration is a narrow typed HTTP client rather than a broad abstraction: its public surface mirrors only the organization, project, project-template, environment, project-role, project-identity, organization-identity, project-membership, identity-template, Kubernetes Auth, and Universal Auth endpoints used by the controllers.
 
 ## Ownership and identity
 
@@ -39,4 +39,4 @@ Names are used only for the initial adopt lookup. An organization is matched by 
 
 ## Failure and security model
 
-Bearer tokens are read only from Secret data and sent as Authorization headers. Kubernetes Auth token-review JWTs and CA certificates are also read only from Secret data. Error conditions include API status and a bounded response body, but neither logs nor status contain credentials. Same-namespace Secret references and explicit API URL validation limit accidental credential and endpoint confusion. Local policy fixtures describe only Kubernetes API, DNS, and Infisical service egress from the manager; Cilium remains available for scenarios that need policy-enforcement evidence.
+Bearer tokens and Universal Auth client credentials are read only from Secret data. Universal Auth credentials are exchanged for cached short-lived bearer tokens in the client. Kubernetes Auth token-review JWTs, identity-template credentials, and CA certificates are also read only from Secret data. Error conditions include API status and a bounded response body, but neither logs nor status contain credentials. Same-namespace Secret references and explicit API URL validation limit accidental credential and endpoint confusion. Local policy fixtures describe only Kubernetes API, DNS, and Infisical service egress from the manager; Cilium remains available for scenarios that need policy-enforcement evidence.

@@ -1,0 +1,19 @@
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalUniversalAuth
+metadata:
+  name: tenant-universal-auth
+spec:
+  connectionRef:
+    name: platform-infisical
+  identityRef:
+    name: tenant-identity
+  config:
+    accessTokenTTL: 3600
+    accessTokenMaxTTL: 7200
+  clientSecret:
+    secretRef:
+      name: tenant-universal-auth
+    description: tenant operator credential
+    rotationNonce: initial
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Delete

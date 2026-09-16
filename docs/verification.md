@@ -25,7 +25,7 @@ CI uses the same repository commands: the test workflow checks generated output 
 
 ## kstatus compatibility
 
-All eight CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
+All ten CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
 
 See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md) for the external interpretation.
 

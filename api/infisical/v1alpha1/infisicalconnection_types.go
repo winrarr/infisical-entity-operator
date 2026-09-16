@@ -20,6 +20,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// UniversalAuthConnectionSpec selects a Universal Auth credential Secret for the connection.
+type UniversalAuthConnectionSpec struct {
+	// SecretRef references a same-namespace Secret containing clientId and clientSecret.
+	SecretRef UniversalAuthSecretReference `json:"secretRef"`
+	// OrganizationSlug optionally scopes Universal Auth login to an Infisical organization.
+	// When omitted, Infisical uses the organization where the machine identity was created.
+	// +optional
+	// +kubebuilder:validation:MaxLength=64
+	OrganizationSlug string `json:"organizationSlug,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="(has(self.authSecretRef) && !has(self.universalAuth)) || (!has(self.authSecretRef) && has(self.universalAuth))",message="exactly one of authSecretRef or universalAuth must be configured"
 // InfisicalConnectionSpec defines the desired state of InfisicalConnection
 type InfisicalConnectionSpec struct {
 	// HostAPI is the Infisical API base URL, including the /api path.
@@ -31,7 +43,13 @@ type InfisicalConnectionSpec struct {
 
 	// AuthSecretRef references a Secret containing a bearer token under Key.
 	// The Secret must be in the same namespace as this connection.
-	AuthSecretRef SecretKeyReference `json:"authSecretRef"`
+	// +optional
+	AuthSecretRef *SecretKeyReference `json:"authSecretRef,omitempty"`
+
+	// UniversalAuth selects a same-namespace Secret containing an Infisical Universal Auth
+	// client ID and client secret. The client secret is exchanged for short-lived bearer tokens.
+	// +optional
+	UniversalAuth *UniversalAuthConnectionSpec `json:"universalAuth,omitempty"`
 
 	// RequestTimeout bounds each request made to Infisical.
 	// +optional

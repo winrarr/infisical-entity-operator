@@ -152,8 +152,8 @@ func (c *Client) ListIdentities(ctx context.Context, projectID string) ([]Identi
 		Identities []Identity `json:"identities"`
 	}
 	query := url.Values{
-		"limit":  []string{strconv.Itoa(1000)},
-		"offset": []string{"0"},
+		paginationLimitParameter: []string{strconv.Itoa(1000)},
+		"offset":                 []string{"0"},
 	}
 	path := "/v1/projects/" + url.PathEscape(projectID) + "/identities"
 	if err := c.do(ctx, http.MethodGet, path, query, nil, &response); err != nil {
@@ -241,9 +241,9 @@ func (c *Client) ListOrganizationIdentities(ctx context.Context, organizationID 
 		Identities []organizationIdentityListItem `json:"identities"`
 	}
 	query := url.Values{
-		"orgId":  []string{organizationID},
-		"limit":  []string{strconv.Itoa(1000)},
-		"offset": []string{"0"},
+		"orgId":                  []string{organizationID},
+		paginationLimitParameter: []string{strconv.Itoa(1000)},
+		"offset":                 []string{"0"},
 	}
 	if err := c.do(ctx, http.MethodGet, "/v1/identities", query, nil, &response); err != nil {
 		return nil, err

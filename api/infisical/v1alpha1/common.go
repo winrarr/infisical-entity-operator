@@ -58,6 +58,20 @@ type SecretKeyReference struct {
 	Key string `json:"key,omitempty"`
 }
 
+// UniversalAuthSecretReference references a same-namespace Secret containing
+// an Infisical Universal Auth client ID and client secret.
+type UniversalAuthSecretReference struct {
+	// Name is the Secret name.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// ClientIDKey is the Secret key containing the client ID. It defaults to clientId.
+	// +optional
+	ClientIDKey string `json:"clientIDKey,omitempty"`
+	// ClientSecretKey is the Secret key containing the client secret. It defaults to clientSecret.
+	// +optional
+	ClientSecretKey string `json:"clientSecretKey,omitempty"`
+}
+
 // InfisicalConnectionReference identifies a same-namespace connection.
 type InfisicalConnectionReference struct {
 	// Name is the InfisicalConnection name.

@@ -7,3 +7,4 @@
 - [0005: Manage identity roles through optional permanent role slugs](0005-identity-role-membership.md)
 - [0006: Use organization-scoped identities for tenant principals](0006-organization-scoped-identities-for-tenant-principals.md)
 - [0007: Make Infisical organizations explicit tenant boundaries](0007-explicit-organization-tenant-boundaries.md)
+- [0008: Keep identity authentication resources typed and credential-safe](0008-identity-authentication-resources.md)

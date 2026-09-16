@@ -24,28 +24,6 @@ The most important end-to-end acceptance paths for two CRDs depend on an Infisic
 
 Add a separately provisioned live test target or CI environment that can create an `InfisicalProjectRole` and complete allowed/disallowed `InfisicalKubernetesAuth` login checks, then document its credentials and network boundary without storing secrets in the repository.
 
-## TD-003: Tighten project-role permission validation
-
-Status: open
-
-### Evidence
-
-`InfisicalProjectRole` has a structural typed permission model and minimum cardinality checks, but subjects, actions, condition operators, and condition combinations remain mostly free-form because the supported Infisical permission surface can evolve. Client decoding intentionally accepts both string and array action responses.
-
-### Impact
-
-Malformed or server-version-specific rules may pass Kubernetes admission and fail only during reconciliation. Users receive the error late, and a future API change could require a compatibility adjustment across the CRD, client, and status model.
-
-### Constraints
-
-- Preserve typed fields; do not replace the CRD with arbitrary JSON.
-- Do not hard-code an incomplete enum set without evidence from the supported API versions.
-- Keep the string/array response compatibility behavior until the support policy is settled.
-
-### Exit criteria
-
-Use the [Infisical API compatibility policy](compatibility.md) to define supported subjects, actions, operators, and valid combinations; add CEL validation and contract tests that reject malformed rules before external reconciliation.
-
 ## TD-005: Cluster-wide manager remains a trusted deployment
 
 Status: accepted limitation

@@ -72,11 +72,6 @@ func infisicalClientForConnection(ctx context.Context, kubeClient client.Client,
 		return nil, fmt.Errorf("get InfisicalConnection %s/%s: %w", namespace, ref.Name, err)
 	}
 
-	token, err := secretValueFromReference(ctx, kubeClient, namespace, connection.Spec.AuthSecretRef, "token", "authentication")
-	if err != nil {
-		return nil, err
-	}
-
 	hostAPI := connection.Spec.HostAPI
 	if hostAPI == "" {
 		hostAPI = "https://app.infisical.com/api"
@@ -85,7 +80,40 @@ func infisicalClientForConnection(ctx context.Context, kubeClient client.Client,
 	if connection.Spec.RequestTimeout != nil && connection.Spec.RequestTimeout.Duration > 0 {
 		timeout = connection.Spec.RequestTimeout.Duration
 	}
-	return infisicalclient.New(hostAPI, token, timeout)
+	if connection.Spec.AuthSecretRef != nil {
+		token, err := secretValueFromReference(ctx, kubeClient, namespace, *connection.Spec.AuthSecretRef, "token", "authentication")
+		if err != nil {
+			return nil, err
+		}
+		return infisicalclient.New(hostAPI, token, timeout)
+	}
+	if connection.Spec.UniversalAuth == nil {
+		return nil, newDependencyError("connection must configure authSecretRef or universalAuth")
+	}
+	clientIDKey := connection.Spec.UniversalAuth.SecretRef.ClientIDKey
+	if clientIDKey == "" {
+		clientIDKey = "clientId"
+	}
+	clientSecretKey := connection.Spec.UniversalAuth.SecretRef.ClientSecretKey
+	if clientSecretKey == "" {
+		clientSecretKey = "clientSecret"
+	}
+	clientID, err := secretValueFromReference(ctx, kubeClient, namespace, infisicalv1alpha1.SecretKeyReference{Name: connection.Spec.UniversalAuth.SecretRef.Name, Key: clientIDKey}, "client ID", "Universal Auth")
+	if err != nil {
+		return nil, err
+	}
+	clientSecret, err := secretValueFromReference(ctx, kubeClient, namespace, infisicalv1alpha1.SecretKeyReference{Name: connection.Spec.UniversalAuth.SecretRef.Name, Key: clientSecretKey}, "client secret", "Universal Auth")
+	if err != nil {
+		return nil, err
+	}
+	return infisicalclient.NewWithUniversalAuth(hostAPI, clientID, clientSecret, connection.Spec.UniversalAuth.OrganizationSlug, timeout)
+}
+
+func connectionReferencesSecret(connection *infisicalv1alpha1.InfisicalConnection, name string) bool {
+	if connection.Spec.AuthSecretRef != nil && connection.Spec.AuthSecretRef.Name == name {
+		return true
+	}
+	return connection.Spec.UniversalAuth != nil && connection.Spec.UniversalAuth.SecretRef.Name == name
 }
 
 func secretValueFromReference(ctx context.Context, kubeClient client.Client, namespace string, ref infisicalv1alpha1.SecretKeyReference, defaultKey, purpose string) (string, error) {
@@ -187,6 +215,15 @@ func setCondition(conditions *[]metav1.Condition, generation int64, status metav
 	})
 }
 
+func conditionReady(conditions []metav1.Condition) bool {
+	for _, condition := range conditions {
+		if condition.Type == readyCondition && condition.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
 func persistStatus(ctx context.Context, kubeClient client.Client, object client.Object, before client.Object) error {
 	if reflect.DeepEqual(before, object) {
 		return nil
@@ -249,8 +286,8 @@ func projectRolePermissionsFrom(spec []infisicalv1alpha1.ProjectRolePermission) 
 	permissions := make([]infisicalclient.ProjectRolePermission, 0, len(spec))
 	for _, permission := range spec {
 		permissions = append(permissions, infisicalclient.ProjectRolePermission{
-			Subject:    permission.Subject,
-			Action:     infisicalclient.ProjectRoleActions(permission.Action),
+			Subject:    string(permission.Subject),
+			Action:     projectRoleActionsFrom(permission.Action),
 			Inverted:   boolValue(permission.Inverted, false),
 			Conditions: projectRoleConditionsFrom(permission.Conditions),
 		})
@@ -290,11 +327,27 @@ func projectRolePermissionsTo(permissions []infisicalclient.ProjectRolePermissio
 	for _, permission := range permissions {
 		inverted := permission.Inverted
 		result = append(result, infisicalv1alpha1.ProjectRolePermission{
-			Subject:    permission.Subject,
-			Action:     append([]string(nil), permission.Action...),
+			Subject:    infisicalv1alpha1.ProjectRoleSubject(permission.Subject),
+			Action:     projectRoleActionsTo(permission.Action),
 			Inverted:   &inverted,
 			Conditions: projectRoleConditionsTo(permission.Conditions),
 		})
+	}
+	return result
+}
+
+func projectRoleActionsFrom(actions []infisicalv1alpha1.ProjectRoleAction) infisicalclient.ProjectRoleActions {
+	result := make(infisicalclient.ProjectRoleActions, 0, len(actions))
+	for _, action := range actions {
+		result = append(result, string(action))
+	}
+	return result
+}
+
+func projectRoleActionsTo(actions infisicalclient.ProjectRoleActions) []infisicalv1alpha1.ProjectRoleAction {
+	result := make([]infisicalv1alpha1.ProjectRoleAction, 0, len(actions))
+	for _, action := range actions {
+		result = append(result, infisicalv1alpha1.ProjectRoleAction(action))
 	}
 	return result
 }

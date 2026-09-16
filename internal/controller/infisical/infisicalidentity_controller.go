@@ -574,7 +574,7 @@ func (r *InfisicalIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			for i := range identities.Items {
 				identity := &identities.Items[i]
 				var connection infisicalv1alpha1.InfisicalConnection
-				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: identity.Namespace, Name: identity.Spec.ConnectionRef.Name}, &connection); err == nil && connection.Spec.AuthSecretRef.Name == object.GetName() {
+				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: identity.Namespace, Name: identity.Spec.ConnectionRef.Name}, &connection); err == nil && connectionReferencesSecret(&connection, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
 				}
 			}

@@ -164,14 +164,19 @@ spec:
                   uses for token review.
                 maxLength: 255
                 type: string
-              templateID:
+              templateRef:
                 description: |-
-                  TemplateID selects an Infisical Kubernetes Auth template. When set, Infisical manages
+                  TemplateRef selects a managed Infisical Kubernetes Auth template. When set, Infisical manages
                   KubernetesHost, CACertSecretRef, TokenReviewerJWTSecretRef, TokenReviewMode, GatewayID,
                   GatewayPoolID, and AllowedAudience from that template; those fields must be omitted.
-                format: uuid
-                minLength: 1
-                type: string
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               tokenReviewMode:
                 description: TokenReviewMode selects the API-server or gateway token
                   review path.
@@ -206,18 +211,18 @@ spec:
             - identityRef
             type: object
             x-kubernetes-validations:
-            - message: templateID cannot be combined with template-managed Kubernetes
+            - message: templateRef cannot be combined with template-managed Kubernetes
                 Auth settings
-              rule: '!has(self.templateID) || self.templateID == '''' || (self.kubernetesHost
-                == '''' && !has(self.caCertSecretRef) && !has(self.tokenReviewerJWTSecretRef)
-                && self.tokenReviewMode == '''' && self.gatewayID == '''' && self.gatewayPoolID
-                == '''' && self.allowedAudience == '''')'
+              rule: '!has(self.templateRef) || (self.kubernetesHost == '''' && !has(self.caCertSecretRef)
+                && !has(self.tokenReviewerJWTSecretRef) && self.tokenReviewMode ==
+                '''' && self.gatewayID == '''' && self.gatewayPoolID == '''' && self.allowedAudience
+                == '''')'
             - message: connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
             - message: identityRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef'
-            - message: templateID is immutable; delete and recreate the InfisicalKubernetesAuth
-              rule: '!has(oldSelf.templateID) || self.templateID == oldSelf.templateID'
+            - message: templateRef is immutable; delete and recreate the InfisicalKubernetesAuth
+              rule: '!has(oldSelf.templateRef) || self.templateRef == oldSelf.templateRef'
           status:
             description: Status defines the observed state of InfisicalKubernetesAuth.
             properties:

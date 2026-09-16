@@ -193,6 +193,80 @@
       "path": "/api/v1/auth/kubernetes-auth/identities/{identityId}"
     },
     {
+      "method": "POST",
+      "path": "/api/v1/identity-templates",
+      "requestProperties": ["authMethod", "name", "templateFields"],
+      "responseProperties": ["authMethod", "id", "name", "orgId", "templateFields"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/identity-templates/search",
+      "responseProperties": ["templates", "totalCount"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/identity-templates/{templateId}",
+      "responseProperties": ["authMethod", "id", "name", "orgId", "templateFields"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/identity-templates/{templateId}",
+      "requestProperties": ["name", "templateFields"],
+      "responseProperties": ["authMethod", "id", "name", "orgId", "templateFields"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/identity-templates/{templateId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/universal-auth/login",
+      "requestProperties": ["clientId", "clientSecret", "organizationSlug"],
+      "requiredRequestProperties": ["clientId", "clientSecret"],
+      "responseProperties": ["accessToken", "accessTokenMaxTTL", "expiresIn", "tokenType"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}",
+      "requestProperties": ["accessTokenMaxTTL", "accessTokenNumUsesLimit", "accessTokenPeriod", "accessTokenTTL", "accessTokenTrustedIps", "clientSecretTrustedIps", "lockoutCounterResetSeconds", "lockoutDurationSeconds", "lockoutEnabled", "lockoutThreshold"],
+      "responseProperties": ["identityUniversalAuth"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}",
+      "responseProperties": ["identityUniversalAuth"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}",
+      "requestProperties": ["accessTokenMaxTTL", "accessTokenNumUsesLimit", "accessTokenPeriod", "accessTokenTTL", "accessTokenTrustedIps", "clientSecretTrustedIps", "lockoutCounterResetSeconds", "lockoutDurationSeconds", "lockoutEnabled", "lockoutThreshold"],
+      "responseProperties": ["identityUniversalAuth"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}/client-secrets",
+      "requestProperties": ["description", "numUsesLimit", "ttl"],
+      "responseProperties": ["clientSecret", "clientSecretData"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}/client-secrets",
+      "responseProperties": ["clientSecretData"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}/client-secrets/{clientSecretId}",
+      "responseProperties": ["clientSecretData"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/universal-auth/identities/{identityId}/client-secrets/{clientSecretId}/revoke"
+    },
+    {
       "method": "GET",
       "path": "/api/v1/project-templates",
       "responseProperties": ["projectTemplates"]

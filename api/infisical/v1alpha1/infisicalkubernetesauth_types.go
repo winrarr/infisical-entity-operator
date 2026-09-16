@@ -34,10 +34,10 @@ type KubernetesTrustedIP struct {
 	IPAddress string `json:"ipAddress"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!has(self.templateID) || self.templateID == '' || (self.kubernetesHost == '' && !has(self.caCertSecretRef) && !has(self.tokenReviewerJWTSecretRef) && self.tokenReviewMode == '' && self.gatewayID == '' && self.gatewayPoolID == '' && self.allowedAudience == '')",message="templateID cannot be combined with template-managed Kubernetes Auth settings"
+// +kubebuilder:validation:XValidation:rule="!has(self.templateRef) || (self.kubernetesHost == '' && !has(self.caCertSecretRef) && !has(self.tokenReviewerJWTSecretRef) && self.tokenReviewMode == '' && self.gatewayID == '' && self.gatewayPoolID == '' && self.allowedAudience == '')",message="templateRef cannot be combined with template-managed Kubernetes Auth settings"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef",message="identityRef is immutable; delete and recreate the InfisicalKubernetesAuth"
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.templateID) || self.templateID == oldSelf.templateID",message="templateID is immutable; delete and recreate the InfisicalKubernetesAuth"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.templateRef) || self.templateRef == oldSelf.templateRef",message="templateRef is immutable; delete and recreate the InfisicalKubernetesAuth"
 
 // InfisicalKubernetesAuthSpec defines the desired state of Infisical Kubernetes Auth.
 type InfisicalKubernetesAuthSpec struct {
@@ -47,13 +47,11 @@ type InfisicalKubernetesAuthSpec struct {
 	// IdentityRef references the InfisicalIdentity receiving this auth method.
 	IdentityRef LocalObjectReference `json:"identityRef"`
 
-	// TemplateID selects an Infisical Kubernetes Auth template. When set, Infisical manages
+	// TemplateRef selects a managed Infisical Kubernetes Auth template. When set, Infisical manages
 	// KubernetesHost, CACertSecretRef, TokenReviewerJWTSecretRef, TokenReviewMode, GatewayID,
 	// GatewayPoolID, and AllowedAudience from that template; those fields must be omitted.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Format=uuid
-	TemplateID string `json:"templateID,omitempty"`
+	TemplateRef *LocalObjectReference `json:"templateRef,omitempty"`
 
 	// KubernetesHost is the Kubernetes API server URL Infisical uses for token review.
 	// +optional
