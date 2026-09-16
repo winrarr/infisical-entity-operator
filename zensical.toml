@@ -51,6 +51,7 @@ nav = [
   { "Operations" = [
     "operations/index.md",
     { "Local Kind" = "operations/local-kind.md" },
+    { "Live Acceptance" = "operations/live-acceptance.md" },
   ] },
   { "Project" = [
     "project/index.md",

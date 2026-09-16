@@ -21,6 +21,7 @@ KIND_NODE_IMAGE ?= kindest/node:v1.37.0
 OPERATOR_NAMESPACE ?= infisical-entity-operator-system
 INFISICAL_NAMESPACE ?= infisical
 INFISICAL_RELEASE ?= infisical
+LIVE_E2E_NAMESPACE ?= infisical-entity-operator-live-e2e
 INFISICAL_CHART_VERSION ?= 1.10.0
 INFISICAL_IMAGE_TAG ?= v0.165.8
 INFISICAL_OPENAPI_URL ?= https://app.infisical.com/api/docs/json
@@ -45,6 +46,8 @@ DOCKER_BUILD_CACHE_ARGS ?=
 
 GO := GOTOOLCHAIN=$(GO_TOOLCHAIN) go
 GOFMT = $(shell GOTOOLCHAIN=$(GO_TOOLCHAIN) go env GOROOT)/bin/gofmt
+
+export INFISICAL_E2E_HOST_API INFISICAL_E2E_TOKEN INFISICAL_E2E_KUBERNETES_HOST INFISICAL_E2E_KUBERNETES_CA_FILE
 
 .PHONY: all
 all: check build ## Run the default verification and build workflow.
@@ -358,6 +361,34 @@ kind-restart: ## Restart the operator after loading a mutable local image tag.
 .PHONY: kind-down
 kind-down: ## Delete only the isolated Kind cluster.
 	"$(KIND)" delete cluster --name "$(KIND_CLUSTER)"
+
+.PHONY: verify-live-e2e-config
+verify-live-e2e-config: ## Verify the required live acceptance configuration is present.
+	@test -n "$${INFISICAL_E2E_HOST_API:-}" || { echo "INFISICAL_E2E_HOST_API must be set for live acceptance" >&2; exit 1; }
+	@test -n "$${INFISICAL_E2E_TOKEN:-}" || { echo "INFISICAL_E2E_TOKEN must be set for live acceptance" >&2; exit 1; }
+	@test -n "$${INFISICAL_E2E_KUBERNETES_HOST:-}" || { echo "INFISICAL_E2E_KUBERNETES_HOST must be set for live acceptance" >&2; exit 1; }
+
+.PHONY: live-e2e
+live-e2e: verify-live-e2e-config build ## Run live acceptance against a provisioned Infisical and Kubernetes environment.
+	@set -euo pipefail; \
+	"$(KUBECTL)" apply -f config/crd/bases >/dev/null; \
+	log_file="$$(mktemp)"; \
+	manager_pid=""; \
+	cleanup() { \
+		if [[ -n "$${manager_pid}" ]]; then kill "$${manager_pid}" >/dev/null 2>&1 || true; wait "$${manager_pid}" >/dev/null 2>&1 || true; fi; \
+		rm -f "$${log_file}"; \
+	}; \
+	trap cleanup EXIT; \
+	"$(PROJECT_DIR)/bin/manager" --metrics-bind-address=0 >"$${log_file}" 2>&1 & \
+	manager_pid=$$!; \
+	ready=false; \
+	for _ in $$(seq 1 60); do \
+		if curl --fail --silent --show-error http://127.0.0.1:8081/readyz >/dev/null 2>&1; then ready=true; break; fi; \
+		if ! kill -0 "$${manager_pid}" >/dev/null 2>&1; then cat "$${log_file}" >&2; exit 1; fi; \
+		sleep 1; \
+	done; \
+	if [[ "$${ready}" != true ]]; then cat "$${log_file}" >&2; echo "operator did not become ready" >&2; exit 1; fi; \
+	KUBECTL="$(KUBECTL)" TEST_NAMESPACE="$(LIVE_E2E_NAMESPACE)" ./hack/e2e-live.sh
 
 ##@ Dependencies
 

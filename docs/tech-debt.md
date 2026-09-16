@@ -4,11 +4,11 @@ This register contains material shortcomings that are known in the current imple
 
 ## TD-001: Complete live acceptance for project roles and Kubernetes Auth
 
-Status: accepted limitation
+Status: acceptance path added; provisioned run pending
 
 ### Evidence
 
-The default Kind environment uses the standalone Infisical chart. Its local plan rejects custom project roles, and its API rejects the cluster-local Kubernetes token-review URL. The e2e script verifies those bounded error paths and successfully exercises built-in `no-access` identity membership, while the HTTP contract tests cover successful custom-role-controller/client behavior. The default local run cannot prove successful live `InfisicalProjectRole` creation or Kubernetes Auth login.
+The default Kind environment uses the standalone Infisical chart. Its local plan rejects custom project roles, and its API rejects the cluster-local Kubernetes token-review URL. The default e2e script verifies those bounded error paths and successfully exercises built-in `no-access` identity membership, while the HTTP contract tests cover successful custom-role-controller/client behavior. The repository now provides `make live-e2e` and a manually triggered Live Acceptance workflow for a separately provisioned Infisical environment with custom project-role capability and a Kubernetes API endpoint reachable from Infisical. That path has not yet been run because no provisioned acceptance credentials or GitHub Actions secrets exist.
 
 ### Impact
 
@@ -22,7 +22,7 @@ The most important end-to-end acceptance paths for two CRDs depend on an Infisic
 
 ### Exit criteria
 
-Add a separately provisioned live test target or CI environment that can create an `InfisicalProjectRole` and complete allowed/disallowed `InfisicalKubernetesAuth` login checks, then document its credentials and network boundary without storing secrets in the repository.
+Run `make live-e2e` in the documented provisioned environment, or configure and dispatch the Live Acceptance workflow, and record a successful allowed/disallowed login result. Keep credentials, kubeconfig, CA data, and reviewer tokens outside the repository and document the environment’s network boundary.
 
 ## TD-005: Cluster-wide manager remains a trusted deployment
 

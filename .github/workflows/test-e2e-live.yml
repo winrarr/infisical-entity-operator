@@ -1,0 +1,59 @@
+name: Live Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      kubernetes_host:
+        description: Kubernetes API URL reachable from Infisical and matching the supplied kubeconfig
+        required: true
+        type: string
+      test_namespace:
+        description: Temporary namespace for the acceptance resources
+        required: false
+        default: infisical-entity-operator-live-e2e
+        type: string
+
+jobs:
+  live-acceptance:
+    name: Provisioned Infisical and Kubernetes Auth
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Verify acceptance secrets
+        env:
+          INFISICAL_E2E_HOST_API: ${{ secrets.INFISICAL_E2E_HOST_API }}
+          INFISICAL_E2E_TOKEN: ${{ secrets.INFISICAL_E2E_TOKEN }}
+          KUBECONFIG_B64: ${{ secrets.INFISICAL_E2E_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${INFISICAL_E2E_HOST_API}" || { echo "INFISICAL_E2E_HOST_API is not configured" >&2; exit 1; }
+          test -n "${INFISICAL_E2E_TOKEN}" || { echo "INFISICAL_E2E_TOKEN is not configured" >&2; exit 1; }
+          test -n "${KUBECONFIG_B64}" || { echo "INFISICAL_E2E_KUBECONFIG_B64 is not configured" >&2; exit 1; }
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.INFISICAL_E2E_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${KUBECONFIG_B64}" || { echo "INFISICAL_E2E_KUBECONFIG_B64 is not configured" >&2; exit 1; }
+          kubeconfig_path="${RUNNER_TEMP}/infisical-e2e-kubeconfig"
+          printf '%s' "${KUBECONFIG_B64}" | base64 --decode > "${kubeconfig_path}"
+          chmod 600 "${kubeconfig_path}"
+          echo "KUBECONFIG=${kubeconfig_path}" >> "${GITHUB_ENV}"
+
+      - name: Run live acceptance
+        env:
+          INFISICAL_E2E_HOST_API: ${{ secrets.INFISICAL_E2E_HOST_API }}
+          INFISICAL_E2E_TOKEN: ${{ secrets.INFISICAL_E2E_TOKEN }}
+          INFISICAL_E2E_KUBERNETES_HOST: ${{ inputs.kubernetes_host }}
+          LIVE_E2E_NAMESPACE: ${{ inputs.test_namespace }}
+        run: make live-e2e
