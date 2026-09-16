@@ -49,7 +49,7 @@ func (r *InfisicalConnectionReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	before := connection.Status
+	before := connection.DeepCopy()
 	apiClient, err := infisicalClientForConnection(ctx, r.Client, connection.Namespace, infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name})
 	if err == nil {
 		err = apiClient.Check(ctx)
@@ -57,12 +57,12 @@ func (r *InfisicalConnectionReconciler) Reconcile(ctx context.Context, req ctrl.
 	if err != nil {
 		connection.Status.ObservedGeneration = connection.Generation
 		setCondition(&connection.Status.Conditions, connection.Generation, "False", "ConnectionUnavailable", statusErrorMessage(err))
-		return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, &connection, before, connection.Status)
+		return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, &connection, before)
 	}
 
 	connection.Status.ObservedGeneration = connection.Generation
 	setCondition(&connection.Status.Conditions, connection.Generation, "True", "Ready", "Infisical API connection is authenticated and reachable")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &connection, before, connection.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &connection, before)
 }
 
 func retryFor(err error) time.Duration {

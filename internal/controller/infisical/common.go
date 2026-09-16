@@ -187,19 +187,13 @@ func setCondition(conditions *[]metav1.Condition, generation int64, status metav
 	})
 }
 
-func persistStatus(ctx context.Context, kubeClient client.Client, object client.Object, before any, after any) error {
-	if reflect.DeepEqual(before, after) {
+func persistStatus(ctx context.Context, kubeClient client.Client, object client.Object, before client.Object) error {
+	if reflect.DeepEqual(before, object) {
 		return nil
 	}
-	if err := kubeClient.Status().Update(ctx, object); err != nil {
-		// A dependency update can race with this status write. The reconcile result
-		// already requests another read, so let the next attempt use the latest object.
-		if apierrors.IsConflict(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
+	// The status subresource patch does not carry an optimistic resource-version
+	// precondition, so unrelated spec and metadata updates are preserved.
+	return kubeClient.Status().Patch(ctx, object, client.MergeFrom(before))
 }
 
 func statusErrorMessage(err error) string {

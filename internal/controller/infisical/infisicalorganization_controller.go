@@ -66,7 +66,7 @@ func (r *InfisicalOrganizationReconciler) Reconcile(ctx context.Context, req ctr
 }
 
 func (r *InfisicalOrganizationReconciler) reconcileOrganization(ctx context.Context, organization *infisicalv1alpha1.InfisicalOrganization) (ctrl.Result, error) {
-	before := organization.Status
+	before := organization.DeepCopy()
 	if err := validateOrganizationSpec(organization); err != nil {
 		return r.organizationError(ctx, organization, "ConfigurationInvalid", err)
 	}
@@ -102,7 +102,7 @@ func (r *InfisicalOrganizationReconciler) reconcileOrganization(ctx context.Cont
 	}
 	if justCreated {
 		setCondition(&organization.Status.Conditions, organization.Generation, "True", "Ready", "Infisical organization is reconciled")
-		return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, organization, before, organization.Status)
+		return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, organization, before)
 	}
 
 	current, err := apiClient.FindOrganization(ctx, organization.Status.OrganizationID, "")
@@ -110,20 +110,20 @@ func (r *InfisicalOrganizationReconciler) reconcileOrganization(ctx context.Cont
 		return r.organizationError(ctx, organization, "ExternalReadFailed", err)
 	}
 	if current == nil {
-		before := organization.Status
+		before := organization.DeepCopy()
 		organization.Status.OrganizationID = ""
 		organization.Status.OrganizationName = ""
 		organization.Status.Slug = ""
 		organization.Status.ObservedGeneration = organization.Generation
 		setCondition(&organization.Status.Conditions, organization.Generation, "False", "RemoteOrganizationMissing", "the organization is not visible to the configured Infisical credential; it will be reacquired according to creationPolicy")
-		return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, organization, before, organization.Status)
+		return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, organization, before)
 	}
 	if organization.Spec.OrganizationID != "" && current.ID != organization.Spec.OrganizationID {
 		return r.organizationError(ctx, organization, "ExternalOrganizationMismatch", fmt.Errorf("infisical organization ID %q does not match requested organizationID %q", current.ID, organization.Spec.OrganizationID))
 	}
 	r.setOrganizationObservedState(organization, current)
 	setCondition(&organization.Status.Conditions, organization.Generation, "True", "Ready", "Infisical organization is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, organization, before, organization.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, organization, before)
 }
 
 func validateOrganizationSpec(organization *infisicalv1alpha1.InfisicalOrganization) error {
@@ -151,10 +151,10 @@ func (r *InfisicalOrganizationReconciler) setOrganizationObservedState(organizat
 }
 
 func (r *InfisicalOrganizationReconciler) organizationError(ctx context.Context, organization *infisicalv1alpha1.InfisicalOrganization, reason string, err error) (ctrl.Result, error) {
-	before := organization.Status
+	before := organization.DeepCopy()
 	organization.Status.ObservedGeneration = organization.Generation
 	setCondition(&organization.Status.Conditions, organization.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, organization, before, organization.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, organization, before)
 }
 
 func (r *InfisicalOrganizationReconciler) reconcileOrganizationDeletion(ctx context.Context, organization *infisicalv1alpha1.InfisicalOrganization) (ctrl.Result, error) {

@@ -34,7 +34,7 @@ Names are used only for the initial adopt lookup. An organization is matched by 
 4. Resolve the Kubernetes dependency when applicable, and resolve auth-method Secrets without placing their contents in status.
 5. Adopt if allowed and no external ID is recorded; otherwise create if allowed.
 6. Read by external ID or identity, patch mutable fields when they drift, and reconcile declared identity memberships through Infisical’s identity-membership API. Project scope manages one project; organization scope resolves an explicit organization and optionally manages the listed project bindings after verifying they belong to it. A project template is selected by name only while a project is being created; later template edits do not mutate existing projects.
-7. Write status and schedule a periodic drift check.
+7. Write status through a merge patch derived from the pre-reconcile object snapshot and schedule a periodic drift check. The status patch is scoped to the status subresource, so a concurrent spec or metadata update is preserved without retrying external Infisical operations.
 8. Set a dependency or external failure condition and requeue with a shorter dependency delay or longer external delay.
 
 ## Failure and security model

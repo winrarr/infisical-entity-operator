@@ -42,6 +42,7 @@ const (
 	testProject                      = "demo"
 	testProjectID                    = "project-1"
 	testConnection                   = "infisical"
+	testTokenSecret                  = "infisical-token"
 	testTokenKey                     = "token"
 	testWorkload                     = "workload"
 	testIdentityID                   = "identity-1"
@@ -104,12 +105,12 @@ func connectionAndSecret(serverURL string) (*infisicalv1alpha1.InfisicalConnecti
 		Spec: infisicalv1alpha1.InfisicalConnectionSpec{
 			HostAPI: serverURL + "/api",
 			AuthSecretRef: infisicalv1alpha1.SecretKeyReference{
-				Name: "infisical-token",
+				Name: testTokenSecret,
 				Key:  testTokenKey,
 			},
 		},
 	}, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "infisical-token", Namespace: testNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: testTokenSecret, Namespace: testNamespace},
 		Data:       map[string][]byte{testTokenKey: []byte("test-token")},
 	}
 }
@@ -1110,6 +1111,52 @@ func TestKubernetesAuthTemplateOmitsTemplateManagedFields(t *testing.T) {
 	auth.Spec.KubernetesHost = "https://kubernetes.default.svc"
 	if err := validateKubernetesAuthSpec(auth); err == nil {
 		t.Fatal("expected template-managed and per-resource Kubernetes settings to conflict")
+	}
+}
+
+func TestPersistStatusPreservesConcurrentSpecUpdate(t *testing.T) {
+	ctx := context.Background()
+	connection := &infisicalv1alpha1.InfisicalConnection{
+		ObjectMeta: metav1.ObjectMeta{Name: testConnection, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalConnectionSpec{
+			HostAPI: "https://initial.example/api",
+			AuthSecretRef: infisicalv1alpha1.SecretKeyReference{
+				Name: testTokenSecret,
+			},
+		},
+	}
+	kubeClient := testClient(t, connection)
+
+	var working infisicalv1alpha1.InfisicalConnection
+	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(connection), &working); err != nil {
+		t.Fatalf("get working connection: %v", err)
+	}
+	before := working.DeepCopy()
+	working.Status.ObservedGeneration = working.Generation
+	setCondition(&working.Status.Conditions, working.Generation, metav1.ConditionTrue, "Ready", "connection is ready")
+
+	var latest infisicalv1alpha1.InfisicalConnection
+	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(connection), &latest); err != nil {
+		t.Fatalf("get latest connection: %v", err)
+	}
+	latest.Spec.HostAPI = "https://changed.example/api"
+	if err := kubeClient.Update(ctx, &latest); err != nil {
+		t.Fatalf("update connection spec concurrently: %v", err)
+	}
+
+	if err := persistStatus(ctx, kubeClient, &working, before); err != nil {
+		t.Fatalf("persist status after concurrent spec update: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalConnection
+	if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(connection), &observed); err != nil {
+		t.Fatalf("get persisted connection: %v", err)
+	}
+	if observed.Spec.HostAPI != "https://changed.example/api" {
+		t.Fatalf("concurrent spec update was lost: %q", observed.Spec.HostAPI)
+	}
+	if observed.Status.ObservedGeneration != working.Generation || len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+		t.Fatalf("status was not persisted: %#v", observed.Status)
 	}
 }
 

@@ -66,7 +66,7 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 	if !auth.DeletionTimestamp.IsZero() {
 		return r.reconcileKubernetesAuthDeletion(ctx, &auth)
 	}
-	before := auth.Status
+	before := auth.DeepCopy()
 	if err := validateKubernetesAuthSpec(&auth); err != nil {
 		return r.kubernetesAuthError(ctx, &auth, "InvalidSpec", err)
 	}
@@ -116,11 +116,11 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 	current, err := apiClient.GetKubernetesAuth(ctx, identity.Status.IdentityID)
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
-			before := auth.Status
+			before := auth.DeepCopy()
 			auth.Status.AuthID = ""
 			auth.Status.ObservedGeneration = auth.Generation
 			setCondition(&auth.Status.Conditions, auth.Generation, "False", "RemoteKubernetesAuthMissing", "the Kubernetes Auth method no longer exists in Infisical; it will be recreated according to creationPolicy")
-			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &auth, before, auth.Status)
+			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &auth, before)
 		}
 		return r.kubernetesAuthError(ctx, &auth, "ExternalReadFailed", err)
 	}
@@ -135,7 +135,7 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 
 	r.setKubernetesAuthObservedState(&auth, current, identity.Status.IdentityID)
 	setCondition(&auth.Status.Conditions, auth.Generation, "True", "Ready", "Infisical Kubernetes Auth is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &auth, before, auth.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &auth, before)
 }
 
 func (r *InfisicalKubernetesAuthReconciler) kubernetesAuthSecrets(ctx context.Context, auth *infisicalv1alpha1.InfisicalKubernetesAuth) (string, string, error) {
@@ -348,10 +348,10 @@ func joinCSV(values []string) string {
 }
 
 func (r *InfisicalKubernetesAuthReconciler) kubernetesAuthError(ctx context.Context, auth *infisicalv1alpha1.InfisicalKubernetesAuth, reason string, err error) (ctrl.Result, error) {
-	before := auth.Status
+	before := auth.DeepCopy()
 	auth.Status.ObservedGeneration = auth.Generation
 	setCondition(&auth.Status.Conditions, auth.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, auth, before, auth.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, auth, before)
 }
 
 func (r *InfisicalKubernetesAuthReconciler) reconcileKubernetesAuthDeletion(ctx context.Context, auth *infisicalv1alpha1.InfisicalKubernetesAuth) (ctrl.Result, error) {

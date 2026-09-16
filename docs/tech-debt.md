@@ -68,28 +68,6 @@ Malformed or server-version-specific rules may pass Kubernetes admission and fai
 
 Use the compatibility policy from TD-002 to define supported subjects, actions, operators, and valid combinations; add CEL validation and contract tests that reject malformed rules before external reconciliation.
 
-## TD-004: Make status persistence conflict-safe without silent loss
-
-Status: open
-
-### Evidence
-
-`persistStatus` currently ignores Kubernetes resource-version conflicts so a dependency update cannot fail an otherwise successful reconcile. The next reconcile is expected to observe the latest object, but the status written by the losing attempt is discarded.
-
-### Impact
-
-A transient conflict can leave status stale for longer than the normal reconciliation interval and provides no direct signal that the observation was not persisted.
-
-### Constraints
-
-- Preserve requeue behavior for dependency and external failures.
-- Avoid broad retries that can duplicate external create or update operations.
-- Keep status writes free of credentials and bounded in size.
-
-### Exit criteria
-
-Use a conflict-safe status patch or targeted retry against the latest resource version, add a focused test for a concurrent status/spec update, and show that external side effects remain idempotent.
-
 ## TD-005: Cluster-wide manager remains a trusted deployment
 
 Status: accepted limitation
