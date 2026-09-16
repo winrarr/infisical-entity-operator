@@ -63,7 +63,7 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !project.DeletionTimestamp.IsZero() {
 		return r.reconcileProjectDeletion(ctx, &project)
 	}
-	before := project.Status
+	before := project.DeepCopy()
 	expectedOrganizationID, err := r.expectedOrganizationID(ctx, &project)
 	if err != nil {
 		return r.projectError(ctx, &project, "OrganizationNotReady", err)
@@ -125,14 +125,14 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	current, err := apiClient.GetProject(ctx, project.Status.ProjectID)
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
-			before := project.Status
+			before := project.DeepCopy()
 			project.Status.ProjectID = ""
 			project.Status.Slug = ""
 			project.Status.OrganizationID = ""
 			project.Status.Environments = nil
 			project.Status.ObservedGeneration = project.Generation
 			setCondition(&project.Status.Conditions, project.Generation, "False", "RemoteProjectMissing", "the project no longer exists in Infisical; it will be recreated according to creationPolicy")
-			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &project, before, project.Status)
+			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &project, before)
 		}
 		return r.projectError(ctx, &project, "ExternalReadFailed", err)
 	}
@@ -155,7 +155,7 @@ func (r *InfisicalProjectReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	r.setProjectObservedState(&project, current)
 	setCondition(&project.Status.Conditions, project.Generation, "True", "Ready", "Infisical project is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &project, before, project.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &project, before)
 }
 
 func (r *InfisicalProjectReconciler) projectTemplateName(ctx context.Context, project *infisicalv1alpha1.InfisicalProject, expectedOrganizationID string) (string, error) {
@@ -243,10 +243,10 @@ func (r *InfisicalProjectReconciler) setProjectObservedState(project *infisicalv
 }
 
 func (r *InfisicalProjectReconciler) projectError(ctx context.Context, project *infisicalv1alpha1.InfisicalProject, reason string, err error) (ctrl.Result, error) {
-	before := project.Status
+	before := project.DeepCopy()
 	project.Status.ObservedGeneration = project.Generation
 	setCondition(&project.Status.Conditions, project.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, project, before, project.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, project, before)
 }
 
 func (r *InfisicalProjectReconciler) reconcileProjectDeletion(ctx context.Context, project *infisicalv1alpha1.InfisicalProject) (ctrl.Result, error) {

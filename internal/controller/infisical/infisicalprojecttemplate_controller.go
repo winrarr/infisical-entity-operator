@@ -63,7 +63,7 @@ func (r *InfisicalProjectTemplateReconciler) Reconcile(ctx context.Context, req 
 	if !template.DeletionTimestamp.IsZero() {
 		return r.reconcileProjectTemplateDeletion(ctx, &template)
 	}
-	before := template.Status
+	before := template.DeepCopy()
 	expectedOrganizationID, err := r.expectedProjectTemplateOrganizationID(ctx, &template)
 	if err != nil {
 		return r.projectTemplateError(ctx, &template, "OrganizationNotReady", err)
@@ -105,13 +105,13 @@ func (r *InfisicalProjectTemplateReconciler) Reconcile(ctx context.Context, req 
 	current, err := apiClient.GetProjectTemplate(ctx, template.Status.TemplateID)
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
-			before := template.Status
+			before := template.DeepCopy()
 			template.Status.TemplateID = ""
 			template.Status.Name = ""
 			template.Status.OrganizationID = ""
 			template.Status.ObservedGeneration = template.Generation
 			setCondition(&template.Status.Conditions, template.Generation, "False", "RemoteProjectTemplateMissing", "the project template no longer exists in Infisical; it will be recreated according to creationPolicy")
-			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &template, before, template.Status)
+			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &template, before)
 		}
 		return r.projectTemplateError(ctx, &template, "ExternalReadFailed", err)
 	}
@@ -129,7 +129,7 @@ func (r *InfisicalProjectTemplateReconciler) Reconcile(ctx context.Context, req 
 
 	r.setProjectTemplateObservedState(&template, current)
 	setCondition(&template.Status.Conditions, template.Generation, "True", "Ready", "Infisical project template is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &template, before, template.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &template, before)
 }
 
 func projectTemplateName(template *infisicalv1alpha1.InfisicalProjectTemplate) string {
@@ -272,10 +272,10 @@ func (r *InfisicalProjectTemplateReconciler) setProjectTemplateObservedState(tem
 }
 
 func (r *InfisicalProjectTemplateReconciler) projectTemplateError(ctx context.Context, template *infisicalv1alpha1.InfisicalProjectTemplate, reason string, err error) (ctrl.Result, error) {
-	before := template.Status
+	before := template.DeepCopy()
 	template.Status.ObservedGeneration = template.Generation
 	setCondition(&template.Status.Conditions, template.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, template, before, template.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, template, before)
 }
 
 func (r *InfisicalProjectTemplateReconciler) reconcileProjectTemplateDeletion(ctx context.Context, template *infisicalv1alpha1.InfisicalProjectTemplate) (ctrl.Result, error) {

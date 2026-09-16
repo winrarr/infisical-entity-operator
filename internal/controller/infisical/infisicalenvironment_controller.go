@@ -62,7 +62,7 @@ func (r *InfisicalEnvironmentReconciler) Reconcile(ctx context.Context, req ctrl
 	if !environment.DeletionTimestamp.IsZero() {
 		return r.reconcileEnvironmentDeletion(ctx, &environment)
 	}
-	before := environment.Status
+	before := environment.DeepCopy()
 
 	var project infisicalv1alpha1.InfisicalProject
 	if err := r.Get(ctx, client.ObjectKey{Namespace: environment.Namespace, Name: environment.Spec.ProjectRef.Name}, &project); err != nil {
@@ -112,11 +112,11 @@ func (r *InfisicalEnvironmentReconciler) Reconcile(ctx context.Context, req ctrl
 	current, err := apiClient.GetEnvironmentByID(ctx, project.Status.ProjectID, environment.Status.EnvironmentID)
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
-			before := environment.Status
+			before := environment.DeepCopy()
 			environment.Status.EnvironmentID = ""
 			environment.Status.ObservedGeneration = environment.Generation
 			setCondition(&environment.Status.Conditions, environment.Generation, "False", "RemoteEnvironmentMissing", "the environment no longer exists in Infisical; it will be recreated according to creationPolicy")
-			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &environment, before, environment.Status)
+			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &environment, before)
 		}
 		return r.environmentError(ctx, &environment, "ExternalReadFailed", err)
 	}
@@ -140,7 +140,7 @@ func (r *InfisicalEnvironmentReconciler) Reconcile(ctx context.Context, req ctrl
 
 	r.setEnvironmentObservedState(&environment, current, project.Status.ProjectID)
 	setCondition(&environment.Status.Conditions, environment.Generation, "True", "Ready", "Infisical environment is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &environment, before, environment.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &environment, before)
 }
 
 func restoreEnvironmentIfDeleted(ctx context.Context, apiClient *infisicalclient.Client, projectID string, environment *infisicalclient.Environment) (*infisicalclient.Environment, error) {
@@ -167,10 +167,10 @@ func (r *InfisicalEnvironmentReconciler) setEnvironmentObservedState(environment
 }
 
 func (r *InfisicalEnvironmentReconciler) environmentError(ctx context.Context, environment *infisicalv1alpha1.InfisicalEnvironment, reason string, err error) (ctrl.Result, error) {
-	before := environment.Status
+	before := environment.DeepCopy()
 	environment.Status.ObservedGeneration = environment.Generation
 	setCondition(&environment.Status.Conditions, environment.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, environment, before, environment.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, environment, before)
 }
 
 func (r *InfisicalEnvironmentReconciler) reconcileEnvironmentDeletion(ctx context.Context, environment *infisicalv1alpha1.InfisicalEnvironment) (ctrl.Result, error) {

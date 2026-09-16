@@ -78,7 +78,7 @@ func (r *InfisicalIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 func (r *InfisicalIdentityReconciler) reconcileIdentity(ctx context.Context, identity *infisicalv1alpha1.InfisicalIdentity) (ctrl.Result, error) {
-	before := identity.Status
+	before := identity.DeepCopy()
 	scope := identityScope(identity)
 	if err := validateIdentitySpec(identity); err != nil {
 		return r.identityError(ctx, identity, "ConfigurationInvalid", err)
@@ -158,7 +158,7 @@ func (r *InfisicalIdentityReconciler) reconcileIdentity(ctx context.Context, ide
 	}
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
-			before := identity.Status
+			before := identity.DeepCopy()
 			identity.Status.IdentityID = ""
 			identity.Status.ProjectID = ""
 			identity.Status.OrganizationID = ""
@@ -168,7 +168,7 @@ func (r *InfisicalIdentityReconciler) reconcileIdentity(ctx context.Context, ide
 			identity.Status.ProjectMemberships = nil
 			identity.Status.ObservedGeneration = identity.Generation
 			setCondition(&identity.Status.Conditions, identity.Generation, "False", "RemoteIdentityMissing", "the identity no longer exists in Infisical; it will be recreated according to creationPolicy")
-			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, identity, before, identity.Status)
+			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, identity, before)
 		}
 		return r.identityError(ctx, identity, "ExternalReadFailed", err)
 	}
@@ -218,7 +218,7 @@ func (r *InfisicalIdentityReconciler) reconcileIdentity(ctx context.Context, ide
 		}
 	}
 	setCondition(&identity.Status.Conditions, identity.Generation, "True", "Ready", "Infisical identity is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, identity, before, identity.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, identity, before)
 }
 
 type identityAnchor struct {
@@ -445,10 +445,10 @@ func (r *InfisicalIdentityReconciler) reconcileIdentityMembership(ctx context.Co
 }
 
 func (r *InfisicalIdentityReconciler) identityError(ctx context.Context, identity *infisicalv1alpha1.InfisicalIdentity, reason string, err error) (ctrl.Result, error) {
-	before := identity.Status
+	before := identity.DeepCopy()
 	identity.Status.ObservedGeneration = identity.Generation
 	setCondition(&identity.Status.Conditions, identity.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, identity, before, identity.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, identity, before)
 }
 
 func (r *InfisicalIdentityReconciler) reconcileIdentityDeletion(ctx context.Context, identity *infisicalv1alpha1.InfisicalIdentity) (ctrl.Result, error) {

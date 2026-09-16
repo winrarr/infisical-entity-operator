@@ -63,7 +63,7 @@ func (r *InfisicalProjectRoleReconciler) Reconcile(ctx context.Context, req ctrl
 	if !role.DeletionTimestamp.IsZero() {
 		return r.reconcileProjectRoleDeletion(ctx, &role)
 	}
-	before := role.Status
+	before := role.DeepCopy()
 
 	var project infisicalv1alpha1.InfisicalProject
 	if err := r.Get(ctx, client.ObjectKey{Namespace: role.Namespace, Name: role.Spec.ProjectRef.Name}, &project); err != nil {
@@ -111,11 +111,11 @@ func (r *InfisicalProjectRoleReconciler) Reconcile(ctx context.Context, req ctrl
 	current, err := apiClient.GetProjectRoleByID(ctx, project.Status.ProjectID, role.Status.RoleID)
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
-			before := role.Status
+			before := role.DeepCopy()
 			role.Status.RoleID = ""
 			role.Status.ObservedGeneration = role.Generation
 			setCondition(&role.Status.Conditions, role.Generation, "False", "RemoteProjectRoleMissing", "the project role no longer exists in Infisical; it will be recreated according to creationPolicy")
-			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &role, before, role.Status)
+			return ctrl.Result{RequeueAfter: externalRetry}, persistStatus(ctx, r.Client, &role, before)
 		}
 		return r.projectRoleError(ctx, &role, "ExternalReadFailed", err)
 	}
@@ -134,7 +134,7 @@ func (r *InfisicalProjectRoleReconciler) Reconcile(ctx context.Context, req ctrl
 
 	r.setProjectRoleObservedState(&role, current, project.Status.ProjectID)
 	setCondition(&role.Status.Conditions, role.Generation, "True", "Ready", "Infisical project role is reconciled")
-	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &role, before, role.Status)
+	return ctrl.Result{RequeueAfter: driftDetectionEvery}, persistStatus(ctx, r.Client, &role, before)
 }
 
 func projectRoleNeedsUpdate(role *infisicalv1alpha1.InfisicalProjectRole, current *infisicalclient.ProjectRole, permissions []infisicalclient.ProjectRolePermission) bool {
@@ -155,10 +155,10 @@ func (r *InfisicalProjectRoleReconciler) setProjectRoleObservedState(role *infis
 }
 
 func (r *InfisicalProjectRoleReconciler) projectRoleError(ctx context.Context, role *infisicalv1alpha1.InfisicalProjectRole, reason string, err error) (ctrl.Result, error) {
-	before := role.Status
+	before := role.DeepCopy()
 	role.Status.ObservedGeneration = role.Generation
 	setCondition(&role.Status.Conditions, role.Generation, "False", reason, statusErrorMessage(err))
-	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, role, before, role.Status)
+	return ctrl.Result{RequeueAfter: retryFor(err)}, persistStatus(ctx, r.Client, role, before)
 }
 
 func (r *InfisicalProjectRoleReconciler) reconcileProjectRoleDeletion(ctx context.Context, role *infisicalv1alpha1.InfisicalProjectRole) (ctrl.Result, error) {
