@@ -21,6 +21,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalOrganization"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.organizationID) || self.organizationID == oldSelf.organizationID",message="organizationID is immutable; delete and recreate the InfisicalOrganization"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.organizationName) || self.organizationName == oldSelf.organizationName",message="organizationName is immutable; delete and recreate the InfisicalOrganization"
+// +kubebuilder:validation:XValidation:rule="!has(self.organizationID) || self.creationPolicy != 'Create'",message="organizationID cannot be set with creationPolicy Create; use Adopt or CreateOrAdopt"
 
 // InfisicalOrganizationSpec defines the desired state of an Infisical organization.
 type InfisicalOrganizationSpec struct {

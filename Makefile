@@ -31,6 +31,9 @@ VCLUSTER_VERSION ?= 0.37.1
 CAPSULE_VERSION ?= 0.14.5
 KYVERNO_VERSION ?= 3.9.1
 CERT_MANAGER_VERSION ?= 1.21.1
+KUBERNETES_AUTH_REVIEW_URL ?=
+KUBERNETES_AUTH_VERIFY_TLS ?= true
+KUBERNETES_AUTH_EXPECTED_FAILURE ?= Local IPs not allowed as URL
 
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 VCLUSTER ?= $(LOCALBIN)/vcluster
@@ -223,8 +226,16 @@ kind-create: kind ## Create the isolated Kind cluster if it does not exist.
 		echo "Kind cluster $(KIND_CLUSTER) already exists"; \
 	fi
 
+.PHONY: kind-context
+kind-context: kind-create ## Verify kubectl is pointed at the isolated Kind cluster.
+	@expected="kind-$(KIND_CLUSTER)"; actual="$$($(KUBECTL) config current-context 2>/dev/null || true)"; \
+	if [ "$$actual" != "$$expected" ]; then \
+		echo "kubectl current context is '$$actual', expected '$$expected'; switch context before running Kind targets" >&2; \
+		exit 1; \
+	fi
+
 .PHONY: kind-ensure-cni
-kind-ensure-cni: kind-create ## Verify the named Kind cluster uses the selected CNI.
+kind-ensure-cni: kind-context ## Verify the named Kind cluster uses the selected CNI.
 	@case "$(KIND_CNI)" in \
 		default) \
 			if "$(KUBECTL)" --context="kind-$(KIND_CLUSTER)" -n kube-system get daemonset kindnet >/dev/null 2>&1; then \
@@ -317,7 +328,13 @@ kind-refresh: docker-build kind-load-image deploy kind-restart ## Build, load, a
 
 kind-e2e: ## Run the live Infisical reconciliation test with the default Kind CNI.
 	$(MAKE) --jobs="$(KIND_PARALLEL_JOBS)" kind-deploy-e2e
-	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" E2E_NETWORKING=default-cni NETWORK_POLICY_FILE=config/network-policy/allow-infisical-egress-network-policy.yaml ./hack/e2e-kind.sh
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" E2E_NETWORKING=default-cni NETWORK_POLICY_FILE=config/network-policy/allow-infisical-egress-network-policy.yaml KUBERNETES_AUTH_REVIEW_URL="$(KUBERNETES_AUTH_REVIEW_URL)" KUBERNETES_AUTH_VERIFY_TLS="$(KUBERNETES_AUTH_VERIFY_TLS)" KUBERNETES_AUTH_EXPECTED_FAILURE="$(KUBERNETES_AUTH_EXPECTED_FAILURE)" ./hack/e2e-kind.sh
+
+.PHONY: kind-kubernetes-auth-e2e
+kind-kubernetes-auth-e2e: ## Run the full Kubernetes Auth allow/deny acceptance with a reachable review URL.
+	@test -n "$(KUBERNETES_AUTH_REVIEW_URL)" || { echo "KUBERNETES_AUTH_REVIEW_URL is required; expose the disposable Kind API server and pass its public HTTPS URL" >&2; exit 1; }
+	$(MAKE) --jobs="$(KIND_PARALLEL_JOBS)" kind-deploy-e2e
+	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" E2E_NETWORKING=default-cni NETWORK_POLICY_FILE=config/network-policy/allow-infisical-egress-network-policy.yaml KUBERNETES_AUTH_REVIEW_URL="$(KUBERNETES_AUTH_REVIEW_URL)" KUBERNETES_AUTH_VERIFY_TLS="$(KUBERNETES_AUTH_VERIFY_TLS)" KUBERNETES_AUTH_EXPECTED_FAILURE= ./hack/e2e-kind.sh
 
 .PHONY: vcluster
 vcluster: ## Download the pinned vCluster CLI used by the virtual-cluster integration test.

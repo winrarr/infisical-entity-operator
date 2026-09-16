@@ -50,6 +50,11 @@ func (r *InfisicalConnectionReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	before := connection.DeepCopy()
+	if err := validateConnectionSpec(&connection); err != nil {
+		connection.Status.ObservedGeneration = connection.Generation
+		setCondition(&connection.Status.Conditions, connection.Generation, "False", "ConfigurationInvalid", statusErrorMessage(err))
+		return ctrl.Result{}, persistStatus(ctx, r.Client, &connection, before)
+	}
 	apiClient, err := infisicalClientForConnection(ctx, r.Client, connection.Namespace, infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name})
 	if err == nil {
 		err = apiClient.Check(ctx)

@@ -94,6 +94,9 @@ spec:
               rule: '!has(oldSelf.organizationID) || self.organizationID == oldSelf.organizationID'
             - message: organizationName is immutable; delete and recreate the InfisicalOrganization
               rule: '!has(oldSelf.organizationName) || self.organizationName == oldSelf.organizationName'
+            - message: organizationID cannot be set with creationPolicy Create; use
+                Adopt or CreateOrAdopt
+              rule: '!has(self.organizationID) || self.creationPolicy != ''Create'''
           status:
             description: Status defines the observed state of InfisicalOrganization.
             properties:

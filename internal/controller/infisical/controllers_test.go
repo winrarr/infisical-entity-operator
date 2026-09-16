@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -50,6 +51,7 @@ const (
 	testSecondProjectID              = "project-2"
 	testTenantSlug                   = "tenant"
 	testUniversalAuthIdentityPath    = "/api/v1/auth/universal-auth/identities/identity-1"
+	testUniversalAuthSecret          = "universal-auth"
 	testUniversalAuthOutputSecret    = "tenant-credentials"
 	testUniversalAuthClientSecretID  = "secret-1"
 	testUniversalAuthClientSecret    = "one-time-secret"
@@ -68,6 +70,7 @@ const (
 	testProjectsPath                 = "/api/v1/projects"
 	testProjectByIDPath              = "/api/v1/projects/project-1"
 	testTenantOrganizationName       = "tenant-org"
+	testConfigurationInvalidReason   = "ConfigurationInvalid"
 )
 
 type infisicalMembershipRequest struct {
@@ -99,6 +102,78 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 			&infisicalv1alpha1.InfisicalUniversalAuth{},
 		).
 		Build()
+}
+
+func conditionStatus(conditions []metav1.Condition, conditionType string) metav1.ConditionStatus {
+	for _, condition := range conditions {
+		if condition.Type == conditionType {
+			return condition.Status
+		}
+	}
+	return metav1.ConditionUnknown
+}
+
+func conditionReason(conditions []metav1.Condition, conditionType string) string {
+	for _, condition := range conditions {
+		if condition.Type == conditionType {
+			return condition.Reason
+		}
+	}
+	return ""
+}
+
+func conditionMessage(conditions []metav1.Condition, conditionType string) string {
+	for _, condition := range conditions {
+		if condition.Type == conditionType {
+			return condition.Message
+		}
+	}
+	return ""
+}
+
+func assertKstatusStates(t *testing.T, conditions []metav1.Condition, ready, reconciling, stalled metav1.ConditionStatus) {
+	t.Helper()
+	expected := map[string]metav1.ConditionStatus{
+		readyCondition:       ready,
+		reconcilingCondition: reconciling,
+		stalledCondition:     stalled,
+	}
+	for conditionType, expectedStatus := range expected {
+		if actual := conditionStatus(conditions, conditionType); actual != expectedStatus {
+			t.Fatalf("expected %s=%s, got %#v", conditionType, expectedStatus, conditions)
+		}
+	}
+}
+
+func TestSetConditionReportsKstatusLifecycle(t *testing.T) {
+	var conditions []metav1.Condition
+
+	setCondition(&conditions, 3, metav1.ConditionFalse, "ProjectNotReady", "project is not ready")
+	if len(conditions) != 3 {
+		t.Fatalf("expected Ready, Reconciling, and Stalled conditions, got %#v", conditions)
+	}
+	assertKstatusStates(t, conditions, metav1.ConditionFalse, metav1.ConditionTrue, metav1.ConditionFalse)
+	if conditionReason(conditions, reconcilingCondition) != "Progressing" {
+		t.Fatalf("expected progressing reason, got %#v", conditions)
+	}
+
+	setCondition(&conditions, 3, metav1.ConditionTrue, "Ready", "reconciliation completed")
+	assertKstatusStates(t, conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
+	if conditionReason(conditions, stalledCondition) != "NotStalled" {
+		t.Fatalf("expected not-stalled reason, got %#v", conditions)
+	}
+
+	setCondition(&conditions, 4, metav1.ConditionFalse, testConfigurationInvalidReason, "configuration is invalid")
+	assertKstatusStates(t, conditions, metav1.ConditionFalse, metav1.ConditionFalse, metav1.ConditionTrue)
+	if conditionReason(conditions, stalledCondition) != testConfigurationInvalidReason {
+		t.Fatalf("expected stalled reason to explain the invalid configuration, got %#v", conditions)
+	}
+
+	for _, condition := range conditions {
+		if condition.ObservedGeneration != 4 {
+			t.Fatalf("expected all conditions to observe generation 4, got %#v", conditions)
+		}
+	}
 }
 
 func identityProjectRef(name string) *infisicalv1alpha1.LocalObjectReference {
@@ -144,8 +219,81 @@ func TestConnectionReconcilerReportsReachability(t *testing.T) {
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(connection), &observed); err != nil {
 		t.Fatalf("get connection: %v", err)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
+}
+
+func TestConnectionReconcilerRejectsInvalidSpecBeforeExternalCalls(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*infisicalv1alpha1.InfisicalConnectionSpec)
+		message string
+	}{
+		{
+			name:    "missing authentication",
+			mutate:  func(spec *infisicalv1alpha1.InfisicalConnectionSpec) { spec.AuthSecretRef = nil },
+			message: "exactly one of authSecretRef or universalAuth must be configured",
+		},
+		{
+			name: "multiple authentication methods",
+			mutate: func(spec *infisicalv1alpha1.InfisicalConnectionSpec) {
+				spec.UniversalAuth = &infisicalv1alpha1.UniversalAuthConnectionSpec{
+					SecretRef: infisicalv1alpha1.UniversalAuthSecretReference{Name: testUniversalAuthSecret},
+				}
+			},
+			message: "exactly one of authSecretRef or universalAuth must be configured",
+		},
+		{
+			name:    "invalid URL scheme",
+			mutate:  func(spec *infisicalv1alpha1.InfisicalConnectionSpec) { spec.HostAPI = "ftp://infisical.example/api" },
+			message: "infisical API URL must use http or https",
+		},
+		{
+			name: "URL query",
+			mutate: func(spec *infisicalv1alpha1.InfisicalConnectionSpec) {
+				spec.HostAPI = "https://infisical.example/api?tenant=one"
+			},
+			message: "infisical API URL must not contain a query or fragment",
+		},
+		{
+			name: "non-positive timeout",
+			mutate: func(spec *infisicalv1alpha1.InfisicalConnectionSpec) {
+				spec.RequestTimeout = &metav1.Duration{}
+			},
+			message: "requestTimeout must be greater than zero",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := infisicalv1alpha1.InfisicalConnectionSpec{
+				HostAPI: "https://infisical.example/api",
+				AuthSecretRef: &infisicalv1alpha1.SecretKeyReference{
+					Name: testTokenSecret,
+				},
+			}
+			tt.mutate(&spec)
+			connection := &infisicalv1alpha1.InfisicalConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: tt.name, Namespace: testNamespace},
+				Spec:       spec,
+			}
+			kubeClient := testClient(t, connection)
+			reconciler := &InfisicalConnectionReconciler{Client: kubeClient}
+			if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(connection)}); err != nil {
+				t.Fatalf("reconcile invalid connection: %v", err)
+			}
+
+			var observed infisicalv1alpha1.InfisicalConnection
+			if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(connection), &observed); err != nil {
+				t.Fatalf("get connection: %v", err)
+			}
+			if conditionReason(observed.Status.Conditions, readyCondition) != "ConfigurationInvalid" || !strings.Contains(conditionMessage(observed.Status.Conditions, readyCondition), tt.message) {
+				t.Fatalf("expected configuration error %q, got %#v", tt.message, observed.Status.Conditions)
+			}
+			assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionFalse, metav1.ConditionFalse, metav1.ConditionTrue)
+		})
 	}
 }
 
@@ -173,12 +321,12 @@ func TestConnectionReconcilerUsesUniversalAuthSecret(t *testing.T) {
 		Spec: infisicalv1alpha1.InfisicalConnectionSpec{
 			HostAPI: server.URL + "/api",
 			UniversalAuth: &infisicalv1alpha1.UniversalAuthConnectionSpec{
-				SecretRef:        infisicalv1alpha1.UniversalAuthSecretReference{Name: "universal-auth"},
+				SecretRef:        infisicalv1alpha1.UniversalAuthSecretReference{Name: testUniversalAuthSecret},
 				OrganizationSlug: testTenantSlug,
 			},
 		},
 	}
-	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "universal-auth", Namespace: testNamespace}, Data: map[string][]byte{"clientId": []byte("client-1"), "clientSecret": []byte("client-secret-1")}}
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: testUniversalAuthSecret, Namespace: testNamespace}, Data: map[string][]byte{"clientId": []byte("client-1"), "clientSecret": []byte("client-secret-1")}}
 	kubeClient := testClient(t, connection, secret)
 	reconciler := &InfisicalConnectionReconciler{Client: kubeClient}
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(connection)}); err != nil {
@@ -191,6 +339,7 @@ func TestConnectionReconcilerUsesUniversalAuthSecret(t *testing.T) {
 	if !conditionReady(observed.Status.Conditions) {
 		t.Fatalf("expected Universal Auth connection to be ready: %#v", observed.Status)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestUniversalAuthReconcilerPublishesClientSecret(t *testing.T) {
@@ -243,6 +392,7 @@ func TestUniversalAuthReconcilerPublishesClientSecret(t *testing.T) {
 	if observed.Status.AuthID != "ua-1" || observed.Status.ClientID != "client-1" || observed.Status.ClientSecret.ClientSecretID != testUniversalAuthClientSecretID || !conditionReady(observed.Status.Conditions) {
 		t.Fatalf("unexpected Universal Auth status: %#v", observed.Status)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 	var published corev1.Secret
 	if err := kubeClient.Get(context.Background(), client.ObjectKey{Namespace: testNamespace, Name: testUniversalAuthOutputSecret}, &published); err != nil {
 		t.Fatalf("get published client Secret: %v", err)
@@ -368,9 +518,10 @@ func TestOrganizationReconcilerCreatesOrganization(t *testing.T) {
 	if observed.Status.OrganizationID != testOrganizationID || observed.Status.OrganizationName != testTenantOrganizationName || observed.Status.Slug != testTenantOrganizationName {
 		t.Fatalf("unexpected organization status: %#v", observed.Status)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestOrganizationReconcilerAdoptsWithMachineIdentityProjectVisibility(t *testing.T) {
@@ -407,9 +558,10 @@ func TestOrganizationReconcilerAdoptsWithMachineIdentityProjectVisibility(t *tes
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(organization), &observed); err != nil {
 		t.Fatalf("get organization: %v", err)
 	}
-	if observed.Status.OrganizationID != testOrganizationID || len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if observed.Status.OrganizationID != testOrganizationID || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("unexpected adopted organization status: %#v", observed.Status)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestProjectReconcilerCreatesAndUpdatesProject(t *testing.T) {
@@ -457,9 +609,10 @@ func TestProjectReconcilerCreatesAndUpdatesProject(t *testing.T) {
 	if len(observed.Status.Environments) != 1 || observed.Status.Environments[0].Slug != "prod" {
 		t.Fatalf("unexpected environment status: %#v", observed.Status.Environments)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 	if len(observed.Finalizers) != 0 {
 		t.Fatalf("expected no finalizer for default orphan policy, got %#v", observed.Finalizers)
 	}
@@ -554,9 +707,10 @@ func TestProjectReconcilerGrantsCreatorAccessForOrganizationProject(t *testing.T
 	if observed.Status.ProjectID != testProjectID || observed.Status.OrganizationID != testOrganizationID {
 		t.Fatalf("unexpected organization project status: %#v", observed.Status)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
@@ -603,9 +757,10 @@ func TestIdentityReconcilerWaitsForProjectThenCreatesIdentity(t *testing.T) {
 	if observed.Status.IdentityID != testIdentityID || observed.Status.ProjectID != testProjectID {
 		t.Fatalf("unexpected identity status: %#v", observed.Status)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 	if len(observed.Finalizers) != 0 {
 		t.Fatalf("expected no finalizer for default orphan policy, got %#v", observed.Finalizers)
 	}
@@ -696,9 +851,10 @@ func TestIdentityReconcilerCreatesOrganizationIdentityAndProjectMembership(t *te
 	if len(observed.Status.ProjectMemberships[0].Roles) != 1 || observed.Status.ProjectMemberships[0].Roles[0].Slug != testMemberRole {
 		t.Fatalf("unexpected organization role status: %#v", observed.Status.ProjectMemberships[0].Roles)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestIdentityReconcilerAdoptsIdentityAndRoleMembership(t *testing.T) {
@@ -771,9 +927,10 @@ func TestIdentityReconcilerWaitsForProjectStatus(t *testing.T) {
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
 		t.Fatalf("get identity: %v", err)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Reason != "ProjectNotReady" || observed.Status.Conditions[0].Status != metav1.ConditionFalse {
+	if conditionReason(observed.Status.Conditions, readyCondition) != "ProjectNotReady" || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionFalse {
 		t.Fatalf("expected project dependency condition, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionFalse, metav1.ConditionTrue, metav1.ConditionFalse)
 }
 
 func TestIdentityReconcilerRejectsPaidRoleSlugs(t *testing.T) {
@@ -788,7 +945,7 @@ func TestIdentityReconcilerRejectsPaidRoleSlugs(t *testing.T) {
 				ProjectRef: identityProjectRef(testProject),
 				RoleSlugs:  []string{"custom-reader"},
 			},
-			reason: "ConfigurationInvalid",
+			reason: testConfigurationInvalidReason,
 		},
 		{
 			name: "organization role",
@@ -797,7 +954,7 @@ func TestIdentityReconcilerRejectsPaidRoleSlugs(t *testing.T) {
 				OrganizationRef:  &infisicalv1alpha1.LocalObjectReference{Name: testTenantOrganizationName},
 				OrganizationRole: "custom-admin",
 			},
-			reason: "ConfigurationInvalid",
+			reason: testConfigurationInvalidReason,
 		},
 	}
 
@@ -817,9 +974,10 @@ func TestIdentityReconcilerRejectsPaidRoleSlugs(t *testing.T) {
 			if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
 				t.Fatalf("get identity: %v", err)
 			}
-			if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Reason != tt.reason || observed.Status.Conditions[0].Status != metav1.ConditionFalse {
+			if conditionReason(observed.Status.Conditions, readyCondition) != tt.reason || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionFalse {
 				t.Fatalf("expected configuration failure, got %#v", observed.Status.Conditions)
 			}
+			assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionFalse, metav1.ConditionFalse, metav1.ConditionTrue)
 		})
 	}
 }
@@ -890,9 +1048,10 @@ func TestIdentityReconcilerReportsRoleMembershipError(t *testing.T) {
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(identity), &observed); err != nil {
 		t.Fatalf("get identity: %v", err)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Reason != "RoleMembershipReconcileFailed" || observed.Status.Conditions[0].Status != metav1.ConditionFalse {
+	if conditionReason(observed.Status.Conditions, readyCondition) != "RoleMembershipReconcileFailed" || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionFalse {
 		t.Fatalf("expected role membership failure condition, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionFalse, metav1.ConditionTrue, metav1.ConditionFalse)
 }
 
 func TestEnvironmentReconcilerWaitsForProjectThenCreatesEnvironment(t *testing.T) {
@@ -939,9 +1098,10 @@ func TestEnvironmentReconcilerWaitsForProjectThenCreatesEnvironment(t *testing.T
 	if observed.Status.EnvironmentID != "environment-1" || observed.Status.ProjectID != testProjectID || observed.Status.Slug != "qa" {
 		t.Fatalf("unexpected environment status: %#v", observed.Status)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestEnvironmentReconcilerRestoresSoftDeletedEnvironment(t *testing.T) {
@@ -986,9 +1146,115 @@ func TestEnvironmentReconcilerRestoresSoftDeletedEnvironment(t *testing.T) {
 	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(environment), &observed); err != nil {
 		t.Fatalf("get environment: %v", err)
 	}
-	if observed.Status.EnvironmentID != "environment-1" || len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if observed.Status.EnvironmentID != "environment-1" || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected restored environment to be Ready, got %#v", observed.Status)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
+}
+
+func validKubernetesAuthForValidation() *infisicalv1alpha1.InfisicalKubernetesAuth {
+	return &infisicalv1alpha1.InfisicalKubernetesAuth{
+		ObjectMeta: metav1.ObjectMeta{Name: "workload-auth", Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalKubernetesAuthSpec{
+			ConnectionRef:        infisicalv1alpha1.InfisicalConnectionReference{Name: testConnection},
+			IdentityRef:          infisicalv1alpha1.LocalObjectReference{Name: testWorkload},
+			AllowedNamespaces:    []string{testNamespace},
+			AllowedNames:         []string{testWorkload},
+			KubernetesHost:       testKubernetesHost,
+			CACertSecretRef:      &infisicalv1alpha1.SecretKeyReference{Name: testKubernetesCASecret, Key: testKubernetesCAKey},
+			VerifyTLSCertificate: boolPtr(true),
+			TokenReviewerJWTSecretRef: &infisicalv1alpha1.SecretKeyReference{
+				Name: testKubernetesReviewerSecret,
+				Key:  testTokenKey,
+			},
+			TokenReviewMode:         infisicalv1alpha1.KubernetesTokenReviewModeAPI,
+			AccessTokenTrustedIPs:   []infisicalv1alpha1.KubernetesTrustedIP{{IPAddress: "10.0.0.0/8"}},
+			AccessTokenTTL:          int64Ptr(3600),
+			AccessTokenMaxTTL:       int64Ptr(7200),
+			AccessTokenNumUsesLimit: int64Ptr(2),
+		},
+	}
+}
+
+func TestValidateKubernetesAuthSpec(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*infisicalv1alpha1.InfisicalKubernetesAuth)
+		message string
+	}{
+		{
+			name: "TLS verification requires CA",
+			mutate: func(auth *infisicalv1alpha1.InfisicalKubernetesAuth) {
+				auth.Spec.CACertSecretRef = nil
+			},
+			message: "caCertSecretRef is required when verifyTLSCertificate is true",
+		},
+		{
+			name: "disabled TLS verification rejects CA",
+			mutate: func(auth *infisicalv1alpha1.InfisicalKubernetesAuth) {
+				auth.Spec.VerifyTLSCertificate = boolPtr(false)
+			},
+			message: "caCertSecretRef cannot be set when verifyTLSCertificate is false",
+		},
+		{
+			name: "unsupported token review mode",
+			mutate: func(auth *infisicalv1alpha1.InfisicalKubernetesAuth) {
+				auth.Spec.TokenReviewMode = infisicalv1alpha1.KubernetesTokenReviewMode("gateway")
+			},
+			message: "only api is available in the free-tier API",
+		},
+		{
+			name: "empty namespace allowlist entry",
+			mutate: func(auth *infisicalv1alpha1.InfisicalKubernetesAuth) {
+				auth.Spec.AllowedNamespaces = []string{""}
+			},
+			message: "allowedNamespaces[0] must not be empty",
+		},
+		{
+			name: "invalid trusted IP",
+			mutate: func(auth *infisicalv1alpha1.InfisicalKubernetesAuth) {
+				auth.Spec.AccessTokenTrustedIPs = []infisicalv1alpha1.KubernetesTrustedIP{{IPAddress: "not-an-ip"}}
+			},
+			message: "must be an IP address or CIDR range",
+		},
+		{
+			name: "access token lifetime out of range",
+			mutate: func(auth *infisicalv1alpha1.InfisicalKubernetesAuth) {
+				auth.Spec.AccessTokenTTL = int64Ptr(315360001)
+			},
+			message: "accessTokenTTL must be between 0 and 315360000 seconds",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auth := validKubernetesAuthForValidation()
+			tt.mutate(auth)
+			if err := validateKubernetesAuthSpec(auth); err == nil || !strings.Contains(err.Error(), tt.message) {
+				t.Fatalf("expected validation error containing %q, got %v", tt.message, err)
+			}
+		})
+	}
+}
+
+func TestKubernetesAuthReconcilerReportsInvalidSpecBeforeDependencies(t *testing.T) {
+	auth := validKubernetesAuthForValidation()
+	auth.Spec.CACertSecretRef = nil
+	kubeClient := testClient(t, auth)
+	reconciler := &InfisicalKubernetesAuthReconciler{Client: kubeClient}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(auth)}); err != nil {
+		t.Fatalf("reconcile invalid Kubernetes Auth: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalKubernetesAuth
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(auth), &observed); err != nil {
+		t.Fatalf("get Kubernetes Auth: %v", err)
+	}
+	if conditionReason(observed.Status.Conditions, readyCondition) != "InvalidSpec" {
+		t.Fatalf("expected InvalidSpec, got %#v", observed.Status.Conditions)
+	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionFalse, metav1.ConditionFalse, metav1.ConditionTrue)
 }
 
 func TestKubernetesAuthReconcilerAttachesAuthWithSecretBackedCredentials(t *testing.T) {
@@ -1025,7 +1291,7 @@ func TestKubernetesAuthReconcilerAttachesAuthWithSecretBackedCredentials(t *test
 			AllowedAudience:   "infisical",
 			CACertSecretRef:   &infisicalv1alpha1.SecretKeyReference{Name: "kubernetes-ca", Key: "ca.crt"},
 			TokenReviewerJWTSecretRef: &infisicalv1alpha1.SecretKeyReference{
-				Name: "kubernetes-reviewer", Key: "token",
+				Name: "kubernetes-reviewer", Key: testTokenKey,
 			},
 			VerifyTLSCertificate:    boolPtr(true),
 			TokenReviewMode:         infisicalv1alpha1.KubernetesTokenReviewModeAPI,
@@ -1054,9 +1320,10 @@ func TestKubernetesAuthReconcilerAttachesAuthWithSecretBackedCredentials(t *test
 	if len(observed.Status.AllowedNamespaces) != 1 || observed.Status.AllowedNamespaces[0] != "default" || observed.Status.AccessTokenTTL != 3600 {
 		t.Fatalf("unexpected Kubernetes Auth configuration: %#v", observed.Status)
 	}
-	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func TestPersistStatusPreservesConcurrentSpecUpdate(t *testing.T) {
@@ -1100,9 +1367,10 @@ func TestPersistStatusPreservesConcurrentSpecUpdate(t *testing.T) {
 	if observed.Spec.HostAPI != "https://changed.example/api" {
 		t.Fatalf("concurrent spec update was lost: %q", observed.Spec.HostAPI)
 	}
-	if observed.Status.ObservedGeneration != working.Generation || len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
+	if observed.Status.ObservedGeneration != working.Generation || conditionStatus(observed.Status.Conditions, readyCondition) != metav1.ConditionTrue {
 		t.Fatalf("status was not persisted: %#v", observed.Status)
 	}
+	assertKstatusStates(t, observed.Status.Conditions, metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionFalse)
 }
 
 func boolPtr(value bool) *bool { return &value }

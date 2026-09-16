@@ -36,6 +36,8 @@ type KubernetesTrustedIP struct {
 
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef",message="connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef",message="identityRef is immutable; delete and recreate the InfisicalKubernetesAuth"
+// +kubebuilder:validation:XValidation:rule="!has(self.verifyTLSCertificate) || self.verifyTLSCertificate || !has(self.caCertSecretRef)",message="caCertSecretRef cannot be set when verifyTLSCertificate is false"
+// +kubebuilder:validation:XValidation:rule="!has(self.verifyTLSCertificate) || !self.verifyTLSCertificate || has(self.caCertSecretRef)",message="caCertSecretRef is required when verifyTLSCertificate is true"
 
 // InfisicalKubernetesAuthSpec defines the desired state of Infisical Kubernetes Auth.
 type InfisicalKubernetesAuthSpec struct {
@@ -52,11 +54,13 @@ type InfisicalKubernetesAuthSpec struct {
 
 	// AllowedNamespaces lists the Kubernetes namespaces trusted to authenticate.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:Items:MinLength=1
 	// +listType=atomic
 	AllowedNamespaces []string `json:"allowedNamespaces"`
 
 	// AllowedNames lists the service account names trusted to authenticate.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:Items:MinLength=1
 	// +listType=atomic
 	AllowedNames []string `json:"allowedNames"`
 
