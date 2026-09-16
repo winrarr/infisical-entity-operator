@@ -15,7 +15,7 @@ This project has both local controller tests and a disposable live environment. 
 | `make docs-build` | The generated API reference and Zensical site build succeed with strict link validation. |
 | `make check` | The complete local static suite: generation, formatting, vet, tests, lint, Helm lint, and documentation build. |
 | `make build` | The controller binary can be built from the current source and generated artifacts. |
-| `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, and the live single-organization reconciliation path. |
+| `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, and the live single-organization reconciliation path. The setup overlaps independent image, cluster, and operator preparation and uses committed artifacts without documentation generation. |
 | `make kind-vcluster-e2e` | A core operator creates an Infisical organization and machine identity, then an operator inside a vCluster adopts that organization and creates a project with the tenant credential. |
 | `make kind-capsule-e2e` | One cluster-wide operator reconciles two Capsule tenants with separate organization credentials while Kyverno rejects a cross-tenant organization reference. |
 | `make kind-multitenancy-e2e` | Runs both tenant-boundary scenarios in sequence. |

@@ -31,7 +31,7 @@ make manifests generate
 make build-installer   # write dist/install.yaml
 make docs-build        # generate the API reference and build site/ strictly
 make docs-serve        # serve the documentation site at localhost:8000
-make kind-e2e          # Kind + Cilium + Infisical + live reconciliation/policy test
+make kind-e2e          # Kind default CNI + Infisical + live reconciliation/policy test
 make kind-down         # delete only the named local Kind cluster
 ```
 

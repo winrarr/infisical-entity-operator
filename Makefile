@@ -16,6 +16,7 @@ HELM ?= helm
 PROJECT_NAME ?= infisical-entity-operator
 KIND_CLUSTER ?= infisical-entity-operator
 KIND_CNI ?= default
+KIND_PARALLEL_JOBS ?= 3
 KIND_NODE_IMAGE ?= kindest/node:v1.37.0
 OPERATOR_NAMESPACE ?= infisical-entity-operator-system
 INFISICAL_NAMESPACE ?= infisical
@@ -39,9 +40,10 @@ KUSTOMIZE_VERSION ?= v5.8.1
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
 CRD_REF_DOCS_VERSION ?= v0.3.0
 GOLANGCI_LINT_VERSION ?= v2.13.2
+DOCKER_BUILD_CACHE_ARGS ?=
 
 GO := GOTOOLCHAIN=$(GO_TOOLCHAIN) go
-GOFMT := $(shell GOTOOLCHAIN=$(GO_TOOLCHAIN) go env GOROOT)/bin/gofmt
+GOFMT = $(shell GOTOOLCHAIN=$(GO_TOOLCHAIN) go env GOROOT)/bin/gofmt
 
 .PHONY: all
 all: check build ## Run the default verification and build workflow.
@@ -146,7 +148,7 @@ run: manifests generate ## Run the controller against the current kubeconfig con
 
 .PHONY: docker-build
 docker-build: ## Build the controller image.
-	$(CONTAINER_TOOL) build --tag $(IMG) .
+	$(CONTAINER_TOOL) buildx build --load $(DOCKER_BUILD_CACHE_ARGS) --tag $(IMG) .
 
 .PHONY: docker-push
 docker-push: ## Push the controller image.
@@ -169,12 +171,24 @@ build-installer: manifests generate kustomize ## Build a standalone Kustomize in
 install: manifests kustomize ## Install the CRDs in the current Kubernetes context.
 	"$(KUSTOMIZE)" build config/crd | "$(KUBECTL)" apply -f -
 
+.PHONY: install-committed
+install-committed: kind-install-cni ## Install the committed CRD artifacts in the current Kubernetes context.
+	"$(KUBECTL)" apply -f config/crd/bases
+
 .PHONY: uninstall
 uninstall: manifests kustomize ## Remove the CRDs from the current Kubernetes context.
 	"$(KUSTOMIZE)" build config/crd | "$(KUBECTL)" delete --ignore-not-found=true -f -
 
 .PHONY: deploy
 deploy: manifests generate helm-lint ## Install or upgrade the operator Helm chart.
+	"$(HELM)" upgrade --install $(PROJECT_NAME) charts/infisical-entity-operator \
+		--namespace $(OPERATOR_NAMESPACE) --create-namespace \
+		--set image.repository=$$(echo $(IMG) | cut -d: -f1) \
+		--set image.tag=$$(echo $(IMG) | cut -d: -f2-) \
+		--wait --timeout 5m
+
+.PHONY: deploy-e2e
+deploy-e2e: kind-install-cni install-committed kind-load-image ## Install or upgrade the operator chart from committed artifacts for E2E.
 	"$(HELM)" upgrade --install $(PROJECT_NAME) charts/infisical-entity-operator \
 		--namespace $(OPERATOR_NAMESPACE) --create-namespace \
 		--set image.repository=$$(echo $(IMG) | cut -d: -f1) \
@@ -188,7 +202,7 @@ undeploy: ## Uninstall the operator Helm release.
 ##@ Local Kind environment
 
 .PHONY: kind-up
-kind-up: kind-create kind-ensure-cni kind-install-cni kind-install-infisical ## Create a local Kind cluster with the selected CNI and Infisical.
+kind-up: kind-install-infisical ## Create a local Kind cluster with the selected CNI and Infisical.
 
 .PHONY: kind-create
 kind-create: kind ## Create the isolated Kind cluster if it does not exist.
@@ -224,7 +238,7 @@ kind-ensure-cni: kind-create ## Verify the named Kind cluster uses the selected 
 	esac
 
 .PHONY: kind-install-cni
-kind-install-cni: ## Install the selected CNI into Kind when required.
+kind-install-cni: kind-ensure-cni ## Install the selected CNI into Kind when required.
 	@case "$(KIND_CNI)" in \
 		default) echo "Using Kind's default CNI" ;; \
 		cilium) "$(MAKE)" kind-install-cilium ;; \
@@ -245,7 +259,7 @@ kind-install-cilium: ## Install the pinned Cilium release into Kind.
 		--wait --timeout 10m
 
 .PHONY: kind-install-infisical
-kind-install-infisical: ## Install the pinned Infisical release with an ephemeral bootstrap token.
+kind-install-infisical: kind-install-cni ## Install the pinned Infisical release with an ephemeral bootstrap token.
 	@"$(KUBECTL)" create namespace "$(INFISICAL_NAMESPACE)" --dry-run=client -o yaml | "$(KUBECTL)" apply -f -
 	@if ! "$(KUBECTL)" -n "$(INFISICAL_NAMESPACE)" get secret infisical-secrets >/dev/null 2>&1; then \
 		auth_secret="$$(openssl rand -base64 32)"; encryption_key="$$(openssl rand -hex 16)"; \
@@ -283,15 +297,20 @@ kind-install-infisical: ## Install the pinned Infisical release with an ephemera
 .PHONY: kind-deploy
 kind-deploy: kind-up docker-build kind-load-image install deploy ## Build and deploy the operator into Kind.
 
+.PHONY: kind-deploy-e2e
+kind-deploy-e2e: kind-install-infisical kind-load-image install-committed deploy-e2e ## Build and deploy the operator into Kind for E2E without documentation generation.
+
 .PHONY: kind-load-image
-kind-load-image: ## Load IMG into the isolated Kind cluster.
+kind-load-image: kind-install-cni docker-build ## Load IMG into the isolated Kind cluster.
 	"$(KIND)" load docker-image "$(IMG)" --name "$(KIND_CLUSTER)"
 
 .PHONY: kind-refresh
 kind-refresh: docker-build kind-load-image deploy kind-restart ## Build, load, and restart the operator in Kind.
 
 .PHONY: kind-e2e
-kind-e2e: kind-deploy kind-restart ## Run the live Infisical reconciliation test with the default Kind CNI.
+
+kind-e2e: ## Run the live Infisical reconciliation test with the default Kind CNI.
+	$(MAKE) --jobs="$(KIND_PARALLEL_JOBS)" kind-deploy-e2e
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" E2E_NETWORKING=default-cni NETWORK_POLICY_FILE=config/network-policy/allow-infisical-egress-network-policy.yaml ./hack/e2e-kind.sh
 
 .PHONY: vcluster
@@ -310,15 +329,19 @@ vcluster: ## Download the pinned vCluster CLI used by the virtual-cluster integr
 	fi
 
 .PHONY: kind-vcluster-e2e
-kind-vcluster-e2e: kind-deploy kind-restart vcluster ## Run the vCluster plus tenant-operator integration test.
+
+kind-vcluster-e2e: ## Run the vCluster plus tenant-operator integration test.
+	$(MAKE) --jobs="$(KIND_PARALLEL_JOBS)" kind-deploy-e2e vcluster
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" VCLUSTER="$(VCLUSTER)" VCLUSTER_VERSION="$(VCLUSTER_VERSION)" ./hack/e2e-kind-vcluster.sh
 
 .PHONY: kind-capsule-e2e
-kind-capsule-e2e: kind-deploy kind-restart ## Run the Capsule, single-operator, and Kyverno boundary test.
+kind-capsule-e2e: ## Run the Capsule, single-operator, and Kyverno boundary test.
+	$(MAKE) --jobs="$(KIND_PARALLEL_JOBS)" kind-deploy-e2e
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" CAPSULE_VERSION="$(CAPSULE_VERSION)" KYVERNO_VERSION="$(KYVERNO_VERSION)" CERT_MANAGER_VERSION="$(CERT_MANAGER_VERSION)" ./hack/e2e-kind-capsule.sh
 
 .PHONY: kind-multitenancy-e2e
-kind-multitenancy-e2e: kind-deploy kind-restart vcluster ## Run both supported local multi-tenancy integration scenarios.
+kind-multitenancy-e2e: ## Run both supported local multi-tenancy integration scenarios.
+	$(MAKE) --jobs="$(KIND_PARALLEL_JOBS)" kind-deploy-e2e vcluster
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" VCLUSTER="$(VCLUSTER)" VCLUSTER_VERSION="$(VCLUSTER_VERSION)" ./hack/e2e-kind-vcluster.sh
 	KIND_CLUSTER="$(KIND_CLUSTER)" OPERATOR_NAMESPACE="$(OPERATOR_NAMESPACE)" INFISICAL_NAMESPACE="$(INFISICAL_NAMESPACE)" IMG="$(IMG)" CAPSULE_VERSION="$(CAPSULE_VERSION)" KYVERNO_VERSION="$(KYVERNO_VERSION)" CERT_MANAGER_VERSION="$(CERT_MANAGER_VERSION)" ./hack/e2e-kind-capsule.sh
 
