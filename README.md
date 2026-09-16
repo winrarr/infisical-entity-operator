@@ -91,7 +91,7 @@ This creates an isolated Kind cluster with Kind's default CNI, installs the offi
 - Connection and ownership references are immutable after creation so an external object cannot silently move between endpoints or projects.
 - The operator stores external identifiers and observed state in Kubernetes status, never external bearer tokens.
 
-See the [documentation map](docs/index.md), [product scope](docs/product.md), [architecture](docs/architecture.md), [verification guide](docs/verification.md), [backlog](docs/backlog.md), [tech-debt register](docs/tech-debt.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
+See the [documentation map](docs/index.md), [product scope](docs/product.md), [architecture](docs/architecture.md), [verification guide](docs/verification.md), [API compatibility policy](docs/compatibility.md), [backlog](docs/backlog.md), [tech-debt register](docs/tech-debt.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
 
 The [published documentation site](https://winrarr.github.io/infisical-entity-operator/) provides the navigable reference and quickstart.
 

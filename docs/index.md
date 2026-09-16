@@ -25,6 +25,7 @@ Secret synchronization is intentionally outside this project. Use Infisical’s 
 - [Product scope](product.md): supported outcome, safety boundaries, and non-goals.
 - [Architecture](architecture.md): controllers, client boundary, ownership, reconciliation, and security model.
 - [Decision records](decisions/index.md): accepted choices that future changes should respect or supersede.
+- [Infisical API compatibility](compatibility.md): supported server profile, contract sources, and drift checks.
 - [Infisical API and dependency research](research/2026-09-09-infisical-api-and-versions.md): dated external evidence and version pins.
 
 ## Development and operations

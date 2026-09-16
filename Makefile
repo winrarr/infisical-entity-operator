@@ -23,6 +23,7 @@ INFISICAL_NAMESPACE ?= infisical
 INFISICAL_RELEASE ?= infisical
 INFISICAL_CHART_VERSION ?= 1.10.0
 INFISICAL_IMAGE_TAG ?= v0.165.8
+INFISICAL_OPENAPI_URL ?= https://app.infisical.com/api/docs/json
 CILIUM_VERSION ?= 1.20.1
 GO_TOOLCHAIN ?= go1.27.1
 KIND_VERSION ?= v0.33.0
@@ -110,6 +111,10 @@ lint-config: golangci-lint ## Validate the golangci-lint configuration.
 helm-lint: ## Lint the operator Helm chart.
 	$(HELM) lint charts/infisical-entity-operator
 
+.PHONY: verify-infisical-api
+verify-infisical-api: ## Verify the supported Infisical client surface against the official OpenAPI document.
+	INFISICAL_OPENAPI_URL="$(INFISICAL_OPENAPI_URL)" ./hack/verify-infisical-openapi.sh
+
 .PHONY: generate-api-reference
 generate-api-reference: crd-ref-docs ## Generate the CRD API reference.
 	@mkdir -p docs/reference
@@ -133,7 +138,7 @@ docs-serve: generate-api-reference ## Generate and serve the documentation site 
 	$(CONTAINER_TOOL) run --rm -p 8000:8000 $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) serve --dev-addr 0.0.0.0:8000 --config-file $(DOCS_CONFIG)
 
 .PHONY: check
-check: manifests generate format-check vet test lint-config lint helm-lint docs-build ## Run the complete local verification suite.
+check: manifests generate format-check vet test lint-config lint helm-lint verify-infisical-api docs-build ## Run the complete local verification suite.
 
 ##@ Build
 

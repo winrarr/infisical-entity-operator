@@ -973,7 +973,7 @@ func TestProjectRoleReconcilerCreatesRoleWithConditions(t *testing.T) {
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/projects/project-1/roles":
 			_, _ = writer.Write([]byte(`{"role":{"id":"role-1","name":"Read Production","slug":"read-production","projectId":"project-1","permissions":[{"subject":"secrets","action":"readValue","conditions":{"environment":{"$eq":"production"}}}]}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/project-1/roles/role-1":
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects/roles/role-1":
 			_, _ = writer.Write([]byte(`{"role":{"id":"role-1","name":"Read Production","slug":"read-production","projectId":"project-1","permissions":[{"subject":"secrets","action":["readValue"],"conditions":{"environment":{"$eq":"production"}}}]}}`))
 		default:
 			http.Error(writer, fmt.Sprintf("unexpected %s %s", request.Method, request.URL.Path), http.StatusNotFound)

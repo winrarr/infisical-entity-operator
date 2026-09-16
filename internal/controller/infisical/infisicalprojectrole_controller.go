@@ -108,7 +108,7 @@ func (r *InfisicalProjectRoleReconciler) Reconcile(ctx context.Context, req ctrl
 		r.setProjectRoleObservedState(&role, created, project.Status.ProjectID)
 	}
 
-	current, err := apiClient.GetProjectRoleByID(ctx, project.Status.ProjectID, role.Status.RoleID)
+	current, err := apiClient.GetProjectRoleByID(ctx, role.Status.RoleID)
 	if err != nil {
 		if infisicalclient.IsNotFound(err) {
 			before := role.DeepCopy()
