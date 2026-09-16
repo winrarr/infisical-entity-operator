@@ -14,6 +14,7 @@ This project has both local controller tests and a disposable live environment. 
 | `make generate-api-reference` | The generated CRD field reference reflects the Go API definitions. |
 | `make docs-build` | The generated API reference and Zensical site build succeed with strict link validation. |
 | `make check` | The complete local static suite: generation, formatting, vet, tests, lint, Helm lint, and documentation build. |
+| `make validate-release RELEASE_TAG=v0.1.0` | The release tag is a supported semantic version and matches the chart and image metadata. |
 | `make build` | The controller binary can be built from the current source and generated artifacts. |
 | `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, and one representative live reconciliation path. The setup overlaps independent image, cluster, and operator preparation and uses committed artifacts without documentation generation. |
 | `make kind-kubernetes-auth-e2e KUBERNETES_AUTH_REVIEW_URL=...` | Runs the full Kubernetes Auth acceptance with a reachable review endpoint, including an allowed and a rejected service-account login. This is an opt-in local tunnel path because the standalone Infisical chart may reject the cluster-local URL. |
@@ -22,7 +23,7 @@ This project has both local controller tests and a disposable live environment. 
 | `make kind-multitenancy-e2e` | Runs both tenant-boundary scenarios in sequence. |
 | `make kind-down` | Only the named disposable Kind cluster is removed. |
 
-CI uses the same repository commands: the test workflow checks generated output and runs `make test`, the lint workflow runs `make lint-config lint helm-lint`, the docs workflow runs `make docs-build` and deploys the result from `main`, and the e2e workflow runs `make kind-e2e` followed by cleanup.
+CI uses the same repository commands: the test workflow checks generated output and runs `make test`, the lint workflow runs `make lint-config lint helm-lint`, the docs workflow runs `make docs-build` and deploys the result from `main`, the e2e workflow runs `make kind-e2e` followed by cleanup, and the release workflow validates release metadata and generated artifacts before publishing.
 
 ## Test boundaries
 

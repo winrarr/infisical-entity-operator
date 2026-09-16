@@ -2,7 +2,8 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/winrarr/infisical-entity-operator
-  tag: dev
+  # An empty tag follows .Chart.AppVersion. Set this explicitly for local images.
+  tag: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

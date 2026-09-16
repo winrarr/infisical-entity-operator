@@ -119,6 +119,11 @@ helm-lint: ## Lint the operator Helm chart.
 verify-infisical-api: ## Verify the supported Infisical client surface against the official OpenAPI document.
 	INFISICAL_OPENAPI_URL="$(INFISICAL_OPENAPI_URL)" ./hack/verify-infisical-openapi.sh
 
+.PHONY: validate-release
+validate-release: ## Validate RELEASE_TAG against the chart metadata.
+	@test -n "$(RELEASE_TAG)" || { echo "RELEASE_TAG is required, for example RELEASE_TAG=v0.1.0" >&2; exit 1; }
+	./hack/validate-release.sh "$(RELEASE_TAG)"
+
 .PHONY: generate-api-reference
 generate-api-reference: crd-ref-docs ## Generate the CRD API reference.
 	@mkdir -p docs/reference

@@ -1,0 +1,176 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to publish or recover.
+        required: true
+        type: string
+      dry_run:
+        description: Validate and build without publishing artifacts or a GitHub Release.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CHART_REPOSITORY: ghcr.io/${{ github.repository_owner }}/charts
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag_name }}
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+
+concurrency:
+  group: publish-release-${{ github.event_name == 'push' && github.ref_name || inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || format('refs/tags/{0}', inputs.tag_name) }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+
+      - name: Validate release metadata
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+
+          ./hack/validate-release.sh "$RELEASE_TAG"
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "$RELEASE_TAG does not point to a commit contained in main" >&2
+            exit 1
+          fi
+
+          version="${RELEASE_TAG#v}"
+          {
+            echo "version=$version"
+            echo "prerelease=$([[ "$version" == *-rc.* ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify generated artifacts and chart
+        run: make verify-generated helm-lint
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        if: env.DRY_RUN != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Helm registry
+        if: env.DRY_RUN != 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push operator image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ env.DRY_RUN != 'true' }}
+          load: ${{ env.DRY_RUN == 'true' }}
+          platforms: ${{ env.DRY_RUN == 'true' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_TAG }}
+
+      - name: Package Helm chart
+        id: chart
+        env:
+          CHART_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+          helm package charts/infisical-entity-operator \
+            --version "$CHART_VERSION" \
+            --app-version "$CHART_VERSION" \
+            --destination dist
+
+          chart_path="dist/infisical-entity-operator-${CHART_VERSION}.tgz"
+          test -f "$chart_path"
+          expected_image="ghcr.io/winrarr/infisical-entity-operator:${CHART_VERSION}"
+          helm template infisical-entity-operator charts/infisical-entity-operator \
+            --namespace infisical-entity-operator-system \
+            | grep -Fq "image: \"$expected_image\""
+          echo "path=$chart_path" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether chart package already exists
+        id: chart_exists
+        if: env.DRY_RUN != 'true'
+        env:
+          CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
+          CHART_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          existing_chart="$(helm show chart "oci://${CHART_REPOSITORY}/infisical-entity-operator" --version "$CHART_VERSION" 2>/dev/null || true)"
+          if [ -n "$existing_chart" ]; then
+            existing_app_version="$(awk '$1 == "appVersion:" { value=$2; gsub(/^"/, "", value); gsub(/"$/, "", value); print value; exit }' <<<"$existing_chart")"
+            if [ "$existing_app_version" != "$CHART_VERSION" ]; then
+              echo "Existing chart $CHART_VERSION has appVersion $existing_app_version, expected $CHART_VERSION" >&2
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push Helm chart
+        if: env.DRY_RUN != 'true' && steps.chart_exists.outputs.exists != 'true'
+        env:
+          CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
+        run: helm push "${{ steps.chart.outputs.path }}" "oci://${CHART_REPOSITORY}"
+
+      - name: Report dry-run result
+        if: env.DRY_RUN == 'true'
+        run: echo "Dry run passed for ${RELEASE_TAG}; no image, chart, or GitHub Release was published."
+
+      - name: Create or update GitHub Release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${{ steps.chart.outputs.path }}" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            release_args=(
+              "$RELEASE_TAG"
+              "${{ steps.chart.outputs.path }}"
+              --repo "$GITHUB_REPOSITORY"
+              --title "$RELEASE_TAG"
+              --generate-notes
+            )
+            if [ "${{ steps.metadata.outputs.prerelease }}" = "true" ]; then
+              release_args+=(--prerelease)
+            fi
+            gh release create "${release_args[@]}"
+          fi

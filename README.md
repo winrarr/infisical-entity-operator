@@ -63,12 +63,22 @@ Set `spec.roleSlugs` on an identity to manage its permanent Infisical project ro
 
 For platform-managed tenant principals, create one `InfisicalOrganization` per tenant, create an `InfisicalIdentity` with `spec.scope: Organization`, point `spec.organizationRef` at that organization, and set `organizationRole: admin` when the tenant must create its own projects. Projects can reference the same organization with `spec.organizationRef`. When an organization-admin machine identity creates a project, the operator automatically grants that creating identity permanent project-admin membership so it can manage the project and its child resources.
 
-Install the chart and CRDs from a repository checkout:
+Install a released chart and its CRDs directly from GHCR:
+
+```sh
+helm upgrade --install infisical-entity-operator \
+  oci://ghcr.io/winrarr/charts/infisical-entity-operator \
+  --version 0.1.0 \
+  --namespace infisical-entity-operator-system --create-namespace
+```
+
+For development, install the chart and CRDs from a repository checkout:
 
 ```sh
 helm upgrade --install infisical-entity-operator \
   ./charts/infisical-entity-operator \
-  --namespace infisical-entity-operator-system --create-namespace
+  --namespace infisical-entity-operator-system --create-namespace \
+  --set image.tag=dev
 ```
 
 For a checkout of this repository, use `make deploy IMG=ghcr.io/winrarr/infisical-entity-operator:<tag>` or build a bundle with `make build-installer`.

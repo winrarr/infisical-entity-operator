@@ -3,7 +3,7 @@
 Start with the resource’s condition, then inspect events and the manager logs:
 
 ```sh
-kubectl -n NAMESPACE get infisicalconnection,infisicalproject,infisicalenvironment,infisicalprojectrole,infisicalidentity,infisicalkubernetesauth
+kubectl -n NAMESPACE get infisicalconnections,infisicalorganizations,infisicalprojects,infisicalenvironments,infisicalidentities,infisicalkubernetesauths,infisicaluniversalauths
 kubectl -n NAMESPACE describe KIND NAME
 kubectl -n infisical-entity-operator-system logs deployment/infisical-entity-operator-infisical-entity-operator
 ```
