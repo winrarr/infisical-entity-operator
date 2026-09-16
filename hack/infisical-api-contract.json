@@ -1,0 +1,233 @@
+{
+  "formatVersion": 1,
+  "source": "https://app.infisical.com/api/docs/json",
+  "testedServerVersion": "v0.165.8",
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/api/v1/projects",
+      "responseProperties": ["projects"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "requestProperties": ["projectName", "projectDescription", "slug", "kmsKeyId", "template", "type", "shouldCreateDefaultEnvs", "hasDeleteProtection"],
+      "requiredRequestProperties": ["projectName"],
+      "responseProperties": ["project"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}",
+      "responseProperties": ["project"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/slug/{slug}",
+      "responseProperties": ["id", "name", "slug", "orgId"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/projects/{projectId}",
+      "requestProperties": ["name", "description", "autoCapitalization", "hasDeleteProtection", "enforceEncryptedSecretManagerSecretMetadata", "slug", "secretSharing", "showSnapshotsLegacy", "secretDetectionIgnoreValues", "pitVersionLimit", "auditLogsRetentionDays"],
+      "responseProperties": ["project"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/projects/{projectId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{projectId}/environments",
+      "requestProperties": ["name", "position", "slug"],
+      "requiredRequestProperties": ["name", "slug"],
+      "responseProperties": ["environment"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}/environments/{envId}",
+      "responseProperties": ["environment"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}/environments/slug/{envSlug}",
+      "responseProperties": ["environment"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/projects/{projectId}/environments/{id}",
+      "requestProperties": ["name", "position", "slug"],
+      "responseProperties": ["environment"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/projects/{projectId}/environments/{id}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{projectId}/environments/{id}/restore",
+      "responseProperties": ["environment"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{projectId}/roles",
+      "requestProperties": ["description", "name", "permissions", "slug"],
+      "requiredRequestProperties": ["slug", "name", "permissions"],
+      "responseProperties": ["role"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/roles/{roleId}",
+      "responseProperties": ["role"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}/roles/slug/{roleSlug}",
+      "responseProperties": ["role"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/projects/{projectId}/roles/{roleId}",
+      "requestProperties": ["description", "name", "permissions", "slug"],
+      "responseProperties": ["role"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/projects/{projectId}/roles/{roleId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{projectId}/identities",
+      "requestProperties": ["hasDeleteProtection", "metadata", "name", "roles"],
+      "requiredRequestProperties": ["name"],
+      "responseProperties": ["identity"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}/identities",
+      "responseProperties": ["identities"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}/identities/{identityId}",
+      "responseProperties": ["identity"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/projects/{projectId}/identities/{identityId}",
+      "requestProperties": ["hasDeleteProtection", "metadata", "name"],
+      "responseProperties": ["identity"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/projects/{projectId}/identities/{identityId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/identities",
+      "requestProperties": ["hasDeleteProtection", "metadata", "name", "organizationId", "role"],
+      "requiredRequestProperties": ["name", "organizationId"],
+      "responseProperties": ["identity"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/identities",
+      "responseProperties": ["identities"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/identities/{identityId}",
+      "responseProperties": ["identity"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/identities/{identityId}",
+      "requestProperties": ["hasDeleteProtection", "metadata", "name", "role"],
+      "responseProperties": ["identity"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/identities/{identityId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{projectId}/memberships/identities/{identityId}",
+      "requestProperties": ["role", "roles"],
+      "responseProperties": ["identityMembership"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{projectId}/memberships/identities/{identityId}",
+      "responseProperties": ["identityMembership"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/projects/{projectId}/memberships/identities/{identityId}",
+      "requestProperties": ["roles"],
+      "requiredRequestProperties": ["roles"],
+      "responseProperties": ["identityMembership"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/projects/{projectId}/memberships/identities/{identityId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/kubernetes-auth/identities/{identityId}",
+      "requestProperties": ["accessTokenMaxTTL", "accessTokenNumUsesLimit", "accessTokenTTL", "accessTokenTrustedIps", "allowedAudience", "allowedNames", "allowedNamespaces", "caCert", "gatewayId", "gatewayPoolId", "kubernetesHost", "templateId", "tokenReviewMode", "tokenReviewerJwt", "verifyTlsCertificate"],
+      "requiredRequestProperties": ["allowedNamespaces", "allowedNames"],
+      "responseProperties": ["identityKubernetesAuth"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/kubernetes-auth/identities/{identityId}",
+      "responseProperties": ["identityKubernetesAuth"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/auth/kubernetes-auth/identities/{identityId}",
+      "requestProperties": ["accessTokenMaxTTL", "accessTokenNumUsesLimit", "accessTokenTTL", "accessTokenTrustedIps", "allowedAudience", "allowedNames", "allowedNamespaces", "caCert", "gatewayId", "gatewayPoolId", "kubernetesHost", "templateId", "tokenReviewMode", "tokenReviewerJwt", "verifyTlsCertificate"],
+      "responseProperties": ["identityKubernetesAuth"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/kubernetes-auth/identities/{identityId}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/project-templates",
+      "responseProperties": ["projectTemplates"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/project-templates",
+      "requestProperties": ["description", "environments", "groups", "identities", "name", "projectManagedIdentities", "roles", "type", "users"],
+      "requiredRequestProperties": ["name", "type"],
+      "responseProperties": ["projectTemplate"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/project-templates/{templateId}",
+      "responseProperties": ["projectTemplate"]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/project-templates/{templateId}",
+      "requestProperties": ["description", "environments", "groups", "identities", "name", "projectManagedIdentities", "roles", "users"],
+      "responseProperties": ["projectTemplate"]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/project-templates/{templateId}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/organizations/{organizationId}/memberships",
+      "responseProperties": ["users"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/organizations/{organizationId}/workspaces",
+      "responseProperties": ["workspaces"]
+    }
+  ]
+}

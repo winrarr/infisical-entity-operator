@@ -104,11 +104,11 @@ type ProjectRolePatch struct {
 }
 
 // GetProjectRoleByID retrieves a project role by ID.
-func (c *Client) GetProjectRoleByID(ctx context.Context, projectID, roleID string) (*ProjectRole, error) {
+func (c *Client) GetProjectRoleByID(ctx context.Context, roleID string) (*ProjectRole, error) {
 	var response struct {
 		Role ProjectRole `json:"role"`
 	}
-	path := "/v1/projects/" + url.PathEscape(projectID) + "/roles/" + url.PathEscape(roleID)
+	path := "/v1/projects/roles/" + url.PathEscape(roleID)
 	if err := c.do(ctx, http.MethodGet, path, nil, nil, &response); err != nil {
 		return nil, err
 	}

@@ -24,28 +24,6 @@ The most important end-to-end acceptance paths for two CRDs depend on an Infisic
 
 Add a separately provisioned live test target or CI environment that can create an `InfisicalProjectRole` and complete allowed/disallowed `InfisicalKubernetesAuth` login checks, then document its credentials and network boundary without storing secrets in the repository.
 
-## TD-002: Establish an Infisical API compatibility and drift policy
-
-Status: open
-
-### Evidence
-
-The typed client is based on endpoint documentation and a checked-in research note. The available OpenAPI fragment did not describe the public project and identity endpoints used here, and there is no automated check against a versioned server schema or an Infisical release matrix.
-
-### Impact
-
-Infisical API response envelopes, permission shapes, or endpoint behavior can change without a deterministic signal that the client and controllers need review.
-
-### Constraints
-
-- Keep the supported client surface narrow and typed.
-- Treat official endpoint documentation and tested server behavior as separate evidence sources.
-- Do not broaden the client or pin an Infisical compatibility promise without an explicit decision.
-
-### Exit criteria
-
-Define the supported Infisical server/API versions, record the authoritative schema source for each supported endpoint, and add contract or compatibility checks that fail or clearly report incompatible changes. Revisit [0003: Use a narrow typed Infisical client](decisions/0003-small-typed-client.md) if a mature client becomes a better fit.
-
 ## TD-003: Tighten project-role permission validation
 
 Status: open
@@ -66,7 +44,7 @@ Malformed or server-version-specific rules may pass Kubernetes admission and fai
 
 ### Exit criteria
 
-Use the compatibility policy from TD-002 to define supported subjects, actions, operators, and valid combinations; add CEL validation and contract tests that reject malformed rules before external reconciliation.
+Use the [Infisical API compatibility policy](compatibility.md) to define supported subjects, actions, operators, and valid combinations; add CEL validation and contract tests that reject malformed rules before external reconciliation.
 
 ## TD-005: Cluster-wide manager remains a trusted deployment
 
