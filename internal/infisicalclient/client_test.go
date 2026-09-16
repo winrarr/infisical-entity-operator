@@ -32,12 +32,9 @@ const (
 	testOrganizationIdentityPath       = "/api/v1/identities/identity-1"
 	testOrganizationByIDPath           = "/api/v1/organization/org-1"
 	testTenantName                     = "tenant"
-	testProjectTemplateID              = "template-1"
 	testIdentityID                     = "identity-1"
 	testUniversalAuthClientSecretID    = "client-secret-1"
 	testUniversalAuthClientSecretValue = "secret-1"
-	testProjectTemplatePath            = "/api/v1/project-templates/template-1"
-	testIdentityTemplatePath           = "/api/v1/identity-templates/template-1"
 	testUniversalAuthIdentityPath      = "/api/v1/auth/universal-auth/identities/identity-1"
 )
 
@@ -64,91 +61,6 @@ func TestClientUsesAPIPathAndBearerToken(t *testing.T) {
 	}
 	if project.ID != "project-1" || project.Name != "demo" {
 		t.Fatalf("unexpected project: %#v", project)
-	}
-}
-
-func TestProjectTemplateClientUsesTemplateEndpoints(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		switch {
-		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/project-templates":
-			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/project-templates":
-			_, _ = writer.Write([]byte(`{"projectTemplates":[{"id":"template-1","name":"platform-defaults","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}]}`))
-		case request.Method == http.MethodGet && request.URL.Path == testProjectTemplatePath:
-			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
-		case request.Method == http.MethodPatch && request.URL.Path == testProjectTemplatePath:
-			_, _ = writer.Write([]byte(`{"projectTemplate":{"id":"template-1","name":"platform-defaults","description":"updated","type":"secret-manager","roles":[],"environments":[],"users":[],"groups":[],"identities":[],"projectManagedIdentities":[]}}`))
-		case request.Method == http.MethodDelete && request.URL.Path == testProjectTemplatePath:
-		default:
-			http.Error(writer, "unexpected request", http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client, err := New(server.URL+"/api", "secret-token", time.Second)
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-	created, err := client.CreateProjectTemplate(context.Background(), CreateProjectTemplateRequest{Name: "platform-defaults", Type: "secret-manager"})
-	if err != nil || created.ID != testProjectTemplateID {
-		t.Fatalf("create project template: %#v, %v", created, err)
-	}
-	found, err := client.FindProjectTemplate(context.Background(), "platform-defaults")
-	if err != nil || found == nil || found.ID != testProjectTemplateID {
-		t.Fatalf("find project template: %#v, %v", found, err)
-	}
-	updated, err := client.UpdateProjectTemplate(context.Background(), testProjectTemplateID, ProjectTemplatePatch{Description: "updated", Roles: []ProjectTemplateRole{}})
-	if err != nil || updated.Description != "updated" {
-		t.Fatalf("update project template: %#v, %v", updated, err)
-	}
-	if err := client.DeleteProjectTemplate(context.Background(), testProjectTemplateID); err != nil {
-		t.Fatalf("delete project template: %v", err)
-	}
-}
-
-func TestIdentityTemplateClientUsesTemplateEndpoints(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		template := `{"id":"template-1","name":"cluster-auth","orgId":"org-1","authMethod":"kubernetes","templateFields":{"tokenReviewMode":"api","kubernetesHost":"https://kubernetes.default.svc","hasTokenReviewerJwt":true}}`
-		switch {
-		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/identity-templates":
-			_, _ = writer.Write([]byte(template))
-		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/identity-templates/search" && request.URL.Query().Get("search") == "cluster-auth":
-			_, _ = writer.Write([]byte(`{"templates":[` + template + `],"totalCount":1}`))
-		case request.Method == http.MethodGet && request.URL.Path == testIdentityTemplatePath:
-			_, _ = writer.Write([]byte(template))
-		case request.Method == http.MethodPatch && request.URL.Path == testIdentityTemplatePath:
-			_, _ = writer.Write([]byte(template))
-		case request.Method == http.MethodDelete && request.URL.Path == testIdentityTemplatePath:
-		default:
-			http.Error(writer, "unexpected request", http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client, err := New(server.URL+"/api", "secret-token", time.Second)
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-	fields := IdentityTemplateFields{TokenReviewMode: "api", KubernetesHost: "https://kubernetes.default.svc"}
-	created, err := client.CreateIdentityTemplate(context.Background(), CreateIdentityTemplateRequest{Name: "cluster-auth", AuthMethod: "kubernetes", TemplateFields: fields})
-	if err != nil || created.ID != testProjectTemplateID {
-		t.Fatalf("create identity template: %#v, %v", created, err)
-	}
-	found, err := client.FindIdentityTemplate(context.Background(), "cluster-auth")
-	if err != nil || found == nil || found.ID != testProjectTemplateID {
-		t.Fatalf("find identity template: %#v, %v", found, err)
-	}
-	updated, err := client.UpdateIdentityTemplate(context.Background(), testProjectTemplateID, IdentityTemplatePatch{TemplateFields: fields})
-	if err != nil || updated.AuthMethod != "kubernetes" {
-		t.Fatalf("update identity template: %#v, %v", updated, err)
-	}
-	if _, err := client.GetIdentityTemplate(context.Background(), testProjectTemplateID); err != nil {
-		t.Fatalf("get identity template: %v", err)
-	}
-	if err := client.DeleteIdentityTemplate(context.Background(), testProjectTemplateID); err != nil {
-		t.Fatalf("delete identity template: %v", err)
 	}
 }
 

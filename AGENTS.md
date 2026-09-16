@@ -2,18 +2,17 @@
 
 ## Orientation
 
-This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1alpha1` are the source of truth for the ten namespaced CRDs:
+This is a Go 1.27 Kubernetes operator. The API definitions in `api/infisical/v1alpha1` are the source of truth for the seven namespaced CRDs:
 
 - `InfisicalConnection` validates an Infisical API endpoint and reads a same-namespace bearer-token Secret.
 - `InfisicalOrganization` creates or adopts an Infisical top-level organization used as a tenant boundary.
 - `InfisicalProject` creates, adopts, updates, observes, and optionally deletes an Infisical project.
-- `InfisicalProjectTemplate` creates, adopts, updates, observes, and optionally deletes a reusable Infisical project template.
 - `InfisicalEnvironment` creates, adopts, updates, observes, and optionally deletes a project environment.
-- `InfisicalProjectRole` creates, adopts, updates, observes, and optionally deletes a project permission role.
-- `InfisicalIdentity` creates, adopts, updates, observes, and optionally deletes a project- or organization-scoped machine identity, including optional permanent project-role membership.
-- `InfisicalIdentityTemplate` manages organization-owned LDAP, Kubernetes, or OIDC identity-authentication templates.
+- `InfisicalIdentity` creates, adopts, updates, observes, and optionally deletes a project- or organization-scoped machine identity, including optional permanent membership in built-in project roles.
 - `InfisicalKubernetesAuth` attaches, adopts, updates, observes, and optionally removes Kubernetes Auth from a machine identity.
 - `InfisicalUniversalAuth` manages a machine identity’s Universal Auth configuration and publishes one-time client credentials to a Secret.
+
+The operator intentionally supports only Infisical Free-tier capabilities. It uses built-in organization and project roles, direct API-server Kubernetes Auth, and the `secret-manager` and `cert-manager` project types. Paid or enterprise-only features are not part of the API or chart.
 
 Reconciliation lives in `internal/controller/infisical`; the intentionally small HTTP client lives in `internal/infisicalclient`. The Helm chart under `charts/infisical-entity-operator` is the primary installation path. Kustomize manifests under `config/` remain useful for CRD installation and bundle generation.
 
@@ -35,7 +34,6 @@ make build-installer   # write dist/install.yaml
 make docs-build        # generate the API reference and build site/ strictly
 make docs-serve        # serve the documentation site at localhost:8000
 make kind-e2e          # Kind default CNI + Infisical + live reconciliation/policy test
-make live-e2e          # focused acceptance against provisioned Infisical and Kubernetes services
 make kind-down         # delete only the named local Kind cluster
 ```
 

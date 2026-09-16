@@ -1,13 +1,12 @@
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical organizations, project templates, projects, environments, project roles, project- and organization-scoped machine identities, identity authentication templates, Kubernetes Auth, and Universal Auth.
+Kubernetes-native lifecycle management for Infisical Free-tier organizations, projects, environments, project- and organization-scoped machine identities, Kubernetes Auth, and Universal Auth.
 
 The operator gives platform teams a declarative boundary around the Infisical control plane:
 
 ```text
 InfisicalConnection → InfisicalOrganization → InfisicalProject → InfisicalEnvironment
-                                                    ├→ InfisicalProjectRole
-                                                    └→ InfisicalIdentity → InfisicalIdentityTemplate / InfisicalKubernetesAuth / InfisicalUniversalAuth
+                                                    └→ InfisicalIdentity → InfisicalKubernetesAuth / InfisicalUniversalAuth
 ```
 
 It handles create-or-adopt workflows, drift correction, dependency-aware status conditions, finalizers, and explicit deletion policy. Secret synchronization remains outside this project; use Infisical’s official Kubernetes operator for `InfisicalSecret`-style workloads.
@@ -58,9 +57,9 @@ spec:
   identityName: payments-workload
 ```
 
-An environment, project role, identity authentication template, Universal Auth, or Kubernetes Auth resource can reference the project, organization, or identity in the same namespace and will wait for that dependency to become ready.
+An environment, Universal Auth, or Kubernetes Auth resource can reference the project, organization, or identity in the same namespace and will wait for that dependency to become ready.
 
-Set `spec.roleSlugs` on an identity to manage its permanent Infisical project roles. Omit the field to leave an existing membership unmanaged; use the built-in `no-access` role explicitly when an identity should have no project permissions.
+Set `spec.roleSlugs` on an identity to manage its permanent Infisical project roles using only the built-in `admin`, `member`, `viewer`, and `no-access` roles. Omit the field to leave an existing membership unmanaged.
 
 For platform-managed tenant principals, create one `InfisicalOrganization` per tenant, create an `InfisicalIdentity` with `spec.scope: Organization`, point `spec.organizationRef` at that organization, and set `organizationRole: admin` when the tenant must create its own projects. Projects can reference the same organization with `spec.organizationRef`. When an organization-admin machine identity creates a project, the operator automatically grants that creating identity permanent project-admin membership so it can manage the project and its child resources.
 
@@ -82,7 +81,9 @@ The complete local path is intentionally reproducible:
 make kind-e2e
 ```
 
-This creates an isolated Kind cluster with Kind's default CNI, installs the official Infisical standalone Helm chart, bootstraps a short-lived local instance-admin token, deploys the operator, applies a standard egress `NetworkPolicy` manifest, and verifies connection, project, identity, and environment reconciliation. It also exercises project-role and Kubernetes Auth reconciliation; the local Infisical chart may report those features as unavailable when its plan rejects custom roles or cluster-local review URLs. Cilium remains available by overriding the setup with `make kind-up KIND_CNI=cilium`. See [local Kind operations](docs/operations/local-kind.md) for cleanup and troubleshooting.
+This creates an isolated Kind cluster with Kind's default CNI, installs the official Infisical standalone Helm chart, bootstraps a short-lived local instance-admin token, deploys the operator, applies a standard egress `NetworkPolicy` manifest, and verifies the supported free-tier resources. Kubernetes Auth is exercised when the local Infisical instance accepts the configured review URL; the standalone local API can reject cluster-local URLs, which is recorded as a known environment limitation. Cilium remains available by overriding the setup with `make kind-up KIND_CNI=cilium`. See [local Kind operations](docs/operations/local-kind.md) for cleanup and troubleshooting.
+
+The operator deliberately does not support paid or enterprise-only Infisical features such as custom roles, project templates, gateway-backed Kubernetes Auth, LDAP/OIDC identity templates, KMS-backed projects, or paid product types. Infisical account quotas still apply, including the Free plan’s identity limit.
 
 ## API and safety notes
 

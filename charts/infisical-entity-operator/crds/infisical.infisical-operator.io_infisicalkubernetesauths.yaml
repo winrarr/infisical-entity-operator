@@ -138,16 +138,6 @@ spec:
                 - Delete
                 - Orphan
                 type: string
-              gatewayID:
-                description: GatewayID selects an Infisical gateway for token review
-                  when gateway mode is used.
-                format: uuid
-                type: string
-              gatewayPoolID:
-                description: GatewayPoolID selects an Infisical gateway pool for token
-                  review when gateway mode is used.
-                format: uuid
-                type: string
               identityRef:
                 description: IdentityRef references the InfisicalIdentity receiving
                   this auth method.
@@ -164,25 +154,10 @@ spec:
                   uses for token review.
                 maxLength: 255
                 type: string
-              templateRef:
-                description: |-
-                  TemplateRef selects a managed Infisical Kubernetes Auth template. When set, Infisical manages
-                  KubernetesHost, CACertSecretRef, TokenReviewerJWTSecretRef, TokenReviewMode, GatewayID,
-                  GatewayPoolID, and AllowedAudience from that template; those fields must be omitted.
-                properties:
-                  name:
-                    description: Name is the referenced resource name.
-                    minLength: 1
-                    type: string
-                required:
-                - name
-                type: object
               tokenReviewMode:
-                description: TokenReviewMode selects the API-server or gateway token
-                  review path.
+                description: TokenReviewMode selects the API-server token review path.
                 enum:
                 - api
-                - gateway
                 type: string
               tokenReviewerJWTSecretRef:
                 description: |-
@@ -211,18 +186,10 @@ spec:
             - identityRef
             type: object
             x-kubernetes-validations:
-            - message: templateRef cannot be combined with template-managed Kubernetes
-                Auth settings
-              rule: '!has(self.templateRef) || (self.kubernetesHost == '''' && !has(self.caCertSecretRef)
-                && !has(self.tokenReviewerJWTSecretRef) && self.tokenReviewMode ==
-                '''' && self.gatewayID == '''' && self.gatewayPoolID == '''' && self.allowedAudience
-                == '''')'
             - message: connectionRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
             - message: identityRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef'
-            - message: templateRef is immutable; delete and recreate the InfisicalKubernetesAuth
-              rule: '!has(oldSelf.templateRef) || self.templateRef == oldSelf.templateRef'
           status:
             description: Status defines the observed state of InfisicalKubernetesAuth.
             properties:
@@ -337,12 +304,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              gatewayID:
-                description: GatewayID is the observed gateway identifier.
-                type: string
-              gatewayPoolID:
-                description: GatewayPoolID is the observed gateway pool identifier.
-                type: string
               hasCACertificate:
                 description: HasCACertificate reports whether a CA certificate is
                   configured without exposing it.
@@ -363,21 +324,11 @@ spec:
                   in status.
                 format: int64
                 type: integer
-              templateID:
-                description: TemplateID is the observed Infisical Kubernetes Auth
-                  template identifier.
-                type: string
               tokenReviewMode:
                 description: TokenReviewMode is the observed token review mode.
                 enum:
                 - api
-                - gateway
                 type: string
-              tokenReviewerJWTTemplateSourced:
-                description: |-
-                  TokenReviewerJWTTemplateSourced reports whether Infisical sources the reviewer JWT from the
-                  linked Kubernetes Auth template.
-                type: boolean
               verifyTLSCertificate:
                 description: VerifyTLSCertificate reports whether the Kubernetes API
                   certificate is verified.

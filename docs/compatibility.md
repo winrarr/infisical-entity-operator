@@ -4,7 +4,7 @@ This project supports a deliberately narrow Infisical control-plane API surface.
 
 ## Compatibility policy
 
-Infisical versions its public API per resource, rather than assigning one version to the whole API. The client therefore pins each endpoint path explicitly, currently using `v1` for projects, environments, roles, identities, memberships, project templates, identity templates, and authentication methods, and `v2` for organization membership and workspace access. A resource may also use different route shapes within the same API version; for example, project-role reads use `/v1/projects/roles/{roleId}`, while project-role updates and deletes remain under `/v1/projects/{projectId}/roles/{roleId}`.
+Infisical versions its public API per resource, rather than assigning one version to the whole API. The client therefore pins each endpoint path explicitly, currently using `v1` for projects, environments, identities, memberships, and authentication methods, and `v2` for organization membership and workspace access.
 
 The supported profiles are:
 
@@ -13,7 +13,7 @@ The supported profiles are:
 | Infisical Cloud | The current public API contract exposed by the official OpenAPI document at the time of verification. |
 | Self-hosted Infisical | The repository’s tested baseline, server image `v0.165.8` with standalone chart `1.10.0`. Other versions are compatibility candidates, not a blanket semver promise. |
 
-The baseline does not mean that every feature is available on every plan. Plan-gated behavior, such as custom project roles, remains an acceptance limitation documented in the [tech-debt register](tech-debt.md).
+The baseline is intentionally limited to free-tier capabilities. Paid and enterprise features are excluded from the supported API surface rather than treated as runtime acceptance limitations.
 
 ## Contract sources
 

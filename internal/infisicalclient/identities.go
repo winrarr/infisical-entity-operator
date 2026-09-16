@@ -45,31 +45,18 @@ type Identity struct {
 
 // IdentityMembershipRole is a role assigned to a project identity membership.
 type IdentityMembershipRole struct {
-	ID                   string `json:"id,omitempty"`
-	Role                 string `json:"role,omitempty"`
-	IsTemporary          bool   `json:"isTemporary,omitempty"`
-	CustomRoleID         string `json:"customRoleId,omitempty"`
-	CustomRoleName       string `json:"customRoleName,omitempty"`
-	CustomRoleSlug       string `json:"customRoleSlug,omitempty"`
-	TemporaryMode        string `json:"temporaryMode,omitempty"`
-	TemporaryRange       string `json:"temporaryRange,omitempty"`
-	TemporaryAccessStart string `json:"temporaryAccessStartTime,omitempty"`
-	TemporaryAccessEnd   string `json:"temporaryAccessEndTime,omitempty"`
+	ID          string `json:"id,omitempty"`
+	Role        string `json:"role,omitempty"`
+	IsTemporary bool   `json:"isTemporary,omitempty"`
 }
 
-// Slug returns the stable built-in or custom role slug.
+// Slug returns the built-in role slug.
 func (role IdentityMembershipRole) Slug() string {
-	if role.CustomRoleSlug != "" {
-		return role.CustomRoleSlug
-	}
 	return role.Role
 }
 
-// Name returns the most specific available role name.
+// Name returns the role slug used by the free-tier membership API.
 func (role IdentityMembershipRole) Name() string {
-	if role.CustomRoleName != "" {
-		return role.CustomRoleName
-	}
 	return role.Role
 }
 

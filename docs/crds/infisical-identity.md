@@ -15,7 +15,7 @@ spec:
     name: payments
   identityName: payments-workload
   roleSlugs:
-    - payments-secret-reader
+    - viewer
   metadata:
     - key: owner
       value: platform
@@ -23,7 +23,7 @@ spec:
   deletionPolicy: Orphan
 ```
 
-If `roleSlugs` is omitted, existing membership is not managed. Set it explicitly to a desired set; use the built-in `no-access` slug when the identity should have no project permissions. Role reconciliation is part of the identity lifecycle and is reflected in `status.roles`.
+If `roleSlugs` is omitted, existing membership is not managed. Set it explicitly to a desired set of built-in roles: `admin`, `member`, `viewer`, or `no-access`. Role reconciliation is part of the identity lifecycle and is reflected in `status.roles`.
 
 The connection and project references are immutable. `hasDeleteProtection` controls Infisical-side protection. See the [generated schema](../reference/api.md#infisicalidentity).
 
@@ -47,7 +47,7 @@ spec:
     - projectRef:
         name: tenant-project
       roleSlugs:
-        - tenant-secret-reader
+        - viewer
     - projectRef:
         name: tenant-observability
       roleSlugs:
@@ -56,6 +56,6 @@ spec:
   deletionPolicy: Orphan
 ```
 
-`organizationRole` may be set when the identity needs an Infisical organization role; leave it empty for the least-privilege `no-access` role. Each listed project membership owns its complete permanent role list. Projects not listed are left unmanaged, so the operator does not accidentally revoke access that another controller or platform workflow owns. The organization identity itself is deleted through Infisical’s organization-identity endpoint when `deletionPolicy: Delete` is selected.
+`organizationRole` may be set to one of Infisical’s built-in organization roles: `admin`, `member`, or `no-access`. Each listed project membership owns its complete permanent role list. Projects not listed are left unmanaged, so the operator does not accidentally revoke access that another controller or platform workflow owns. The organization identity itself is deleted through Infisical’s organization-identity endpoint when `deletionPolicy: Delete` is selected.
 
 This is an Infisical authorization model, not a Kubernetes isolation boundary. For a vCluster or other tenant cluster, install an operator instance in that cluster and provide it with a machine-identity credential whose Infisical organization role is limited to that tenant organization. Keep the cluster-wide deployment trusted unless Kubernetes RBAC and Secret access are independently isolated.

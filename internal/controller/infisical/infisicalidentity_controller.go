@@ -52,7 +52,6 @@ func (e *identityConfigurationError) Unwrap() error { return e.err }
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalconnections,verbs=get;list;watch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalorganizations,verbs=get;list;watch
 // +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojects,verbs=get;list;watch
-// +kubebuilder:rbac:groups=infisical.infisical-operator.io,resources=infisicalprojectroles,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 func (r *InfisicalIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -288,12 +287,22 @@ func validateIdentitySpec(identity *infisicalv1alpha1.InfisicalIdentity) error {
 		if len(identity.Spec.ProjectRoleBindings) != 0 {
 			return fmt.Errorf("projectRoleBindings is only valid for Organization scope")
 		}
+		if _, err := identityRoleSlugs(identity.Spec.RoleSlugs); err != nil {
+			return err
+		}
 	case infisicalv1alpha1.IdentityScopeOrganization:
 		if identity.Spec.OrganizationRef == nil || identity.Spec.OrganizationRef.Name == "" {
 			return fmt.Errorf("organizationRef is required for Organization scope")
 		}
 		if identity.Spec.ProjectRef != nil && identity.Spec.ProjectRef.Name != "" {
 			return fmt.Errorf("projectRef is only valid for Project scope")
+		}
+		if identity.Spec.OrganizationRole != "" {
+			switch identity.Spec.OrganizationRole {
+			case infisicalAdminRole, "member", infisicalNoAccessRole:
+			default:
+				return fmt.Errorf("organization role %q is not a built-in free-tier role; custom roles are not supported", identity.Spec.OrganizationRole)
+			}
 		}
 		seenProjects := make(map[string]struct{}, len(identity.Spec.ProjectRoleBindings))
 		for _, binding := range identity.Spec.ProjectRoleBindings {
@@ -323,7 +332,7 @@ func identityScope(identity *infisicalv1alpha1.InfisicalIdentity) infisicalv1alp
 
 func organizationRole(identity *infisicalv1alpha1.InfisicalIdentity) string {
 	if identity.Spec.OrganizationRole == "" {
-		return "no-access"
+		return infisicalNoAccessRole
 	}
 	return identity.Spec.OrganizationRole
 }
@@ -489,18 +498,6 @@ func identityReferencesOrganization(identity *infisicalv1alpha1.InfisicalIdentit
 	return identity.Spec.OrganizationRef != nil && identity.Spec.OrganizationRef.Name == organizationName
 }
 
-func identityUsesRole(identity *infisicalv1alpha1.InfisicalIdentity, projectName, roleSlug string) bool {
-	if identityScope(identity) == infisicalv1alpha1.IdentityScopeOrganization {
-		for _, binding := range identity.Spec.ProjectRoleBindings {
-			if binding.ProjectRef.Name == projectName && containsString(binding.RoleSlugs, roleSlug) {
-				return true
-			}
-		}
-		return false
-	}
-	return identity.Spec.ProjectRef != nil && identity.Spec.ProjectRef.Name == projectName && containsString(identity.Spec.RoleSlugs, roleSlug)
-}
-
 func (r *InfisicalIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infisicalv1alpha1.InfisicalIdentity{}).
@@ -543,25 +540,6 @@ func (r *InfisicalIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if identityReferencesOrganization(identity, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
 				}
-			}
-			return requests
-		})).
-		Watches(&infisicalv1alpha1.InfisicalProjectRole{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
-			role, ok := object.(*infisicalv1alpha1.InfisicalProjectRole)
-			if !ok {
-				return nil
-			}
-			var identities infisicalv1alpha1.InfisicalIdentityList
-			if err := mgr.GetClient().List(ctx, &identities, client.InNamespace(object.GetNamespace())); err != nil {
-				return nil
-			}
-			requests := make([]ctrl.Request, 0)
-			for i := range identities.Items {
-				identity := &identities.Items[i]
-				if !identityUsesRole(identity, role.Spec.ProjectRef.Name, projectRoleSlug(role)) {
-					continue
-				}
-				requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(identity)})
 			}
 			return requests
 		})).

@@ -4,7 +4,7 @@ title: Overview
 
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical organizations, project templates, projects, environments, project roles, machine identities, and Kubernetes Auth.
+Kubernetes-native lifecycle management for Infisical Free-tier organizations, projects, environments, machine identities, Kubernetes Auth, and Universal Auth.
 
 Start with the [quickstart](quickstart.md), or read the [README](https://github.com/winrarr/infisical-entity-operator/blob/main/README.md) for the concise product summary. The [source repository](https://github.com/winrarr/infisical-entity-operator) contains the chart, examples, tests, and implementation.
 
@@ -12,9 +12,8 @@ The operator reconciles a dependency-aware resource graph:
 
 ```text
 InfisicalConnection → InfisicalOrganization ─┐
-                                             ├→ InfisicalProjectTemplate → InfisicalProject → InfisicalEnvironment
-                                             │                                      ├→ InfisicalProjectRole
-                                             │                                      └→ InfisicalIdentity → InfisicalKubernetesAuth
+                                             ├→ InfisicalProject → InfisicalEnvironment
+                                             │                         └→ InfisicalIdentity → InfisicalKubernetesAuth / InfisicalUniversalAuth
                                              └──────────────────────────────────────┘
 ```
 

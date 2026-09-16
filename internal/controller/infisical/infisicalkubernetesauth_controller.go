@@ -18,7 +18,6 @@ package infisical
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -86,11 +85,6 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 	if err != nil {
 		return r.kubernetesAuthError(ctx, &auth, "ConnectionNotReady", err)
 	}
-	templateID, err := r.kubernetesAuthTemplateID(ctx, &auth)
-	if err != nil {
-		return r.kubernetesAuthError(ctx, &auth, "TemplateNotReady", err)
-	}
-
 	if auth.Status.AuthID == "" && canAdopt(auth.Spec.CreationPolicy) {
 		adopted, getErr := apiClient.GetKubernetesAuth(ctx, identity.Status.IdentityID)
 		if getErr != nil && !infisicalclient.IsNotFound(getErr) {
@@ -110,7 +104,7 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 		if !canCreate(auth.Spec.CreationPolicy) {
 			return r.kubernetesAuthError(ctx, &auth, "CreationNotAllowed", newDependencyError("Kubernetes Auth was not found and creationPolicy is Adopt"))
 		}
-		created, createErr := apiClient.AttachKubernetesAuth(ctx, identity.Status.IdentityID, kubernetesAuthRequestFrom(&auth, templateID, caCert, tokenReviewerJWT))
+		created, createErr := apiClient.AttachKubernetesAuth(ctx, identity.Status.IdentityID, kubernetesAuthRequestFrom(&auth, caCert, tokenReviewerJWT))
 		if createErr != nil {
 			return r.kubernetesAuthError(ctx, &auth, "ExternalCreateFailed", createErr)
 		}
@@ -129,8 +123,8 @@ func (r *InfisicalKubernetesAuthReconciler) Reconcile(ctx context.Context, req c
 		return r.kubernetesAuthError(ctx, &auth, "ExternalReadFailed", err)
 	}
 
-	if kubernetesAuthNeedsUpdate(&auth, current, templateID, caCert, tokenReviewerJWT) {
-		updated, updateErr := apiClient.UpdateKubernetesAuth(ctx, identity.Status.IdentityID, kubernetesAuthPatchFrom(&auth, templateID, caCert, tokenReviewerJWT))
+	if kubernetesAuthNeedsUpdate(&auth, current, caCert, tokenReviewerJWT) {
+		updated, updateErr := apiClient.UpdateKubernetesAuth(ctx, identity.Status.IdentityID, kubernetesAuthPatchFrom(&auth, caCert, tokenReviewerJWT))
 		if updateErr != nil {
 			return r.kubernetesAuthError(ctx, &auth, "ExternalUpdateFailed", updateErr)
 		}
@@ -154,29 +148,8 @@ func (r *InfisicalKubernetesAuthReconciler) kubernetesAuthSecrets(ctx context.Co
 	return caCert, tokenReviewerJWT, nil
 }
 
-func (r *InfisicalKubernetesAuthReconciler) kubernetesAuthTemplateID(ctx context.Context, auth *infisicalv1alpha1.InfisicalKubernetesAuth) (string, error) {
-	if auth.Spec.TemplateRef == nil || auth.Spec.TemplateRef.Name == "" {
-		return "", nil
-	}
-	var template infisicalv1alpha1.InfisicalIdentityTemplate
-	if err := r.Get(ctx, client.ObjectKey{Namespace: auth.Namespace, Name: auth.Spec.TemplateRef.Name}, &template); err != nil {
-		if apierrors.IsNotFound(err) {
-			return "", newDependencyError("InfisicalIdentityTemplate %s/%s was not found", auth.Namespace, auth.Spec.TemplateRef.Name)
-		}
-		return "", fmt.Errorf("get InfisicalIdentityTemplate %s/%s: %w", auth.Namespace, auth.Spec.TemplateRef.Name, err)
-	}
-	if template.Spec.AuthMethod != infisicalv1alpha1.IdentityTemplateAuthMethodKubernetes {
-		return "", fmt.Errorf("InfisicalIdentityTemplate %s/%s uses auth method %q, want %q", template.Namespace, template.Name, template.Spec.AuthMethod, infisicalv1alpha1.IdentityTemplateAuthMethodKubernetes)
-	}
-	if template.Status.TemplateID == "" || !conditionReady(template.Status.Conditions) {
-		return "", newDependencyError("InfisicalIdentityTemplate %s/%s is not ready", template.Namespace, template.Name)
-	}
-	return template.Status.TemplateID, nil
-}
-
-func kubernetesAuthRequestFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, templateID, caCert, tokenReviewerJWT string) infisicalclient.CreateKubernetesAuthRequest {
+func kubernetesAuthRequestFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, caCert, tokenReviewerJWT string) infisicalclient.CreateKubernetesAuthRequest {
 	request := infisicalclient.CreateKubernetesAuthRequest{
-		TemplateID:              templateID,
 		AllowedNamespaces:       joinCSV(auth.Spec.AllowedNamespaces),
 		AllowedNames:            joinCSV(auth.Spec.AllowedNames),
 		AccessTokenTrustedIPs:   kubernetesTrustedIPsFrom(auth.Spec.AccessTokenTrustedIPs),
@@ -184,34 +157,25 @@ func kubernetesAuthRequestFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, 
 		AccessTokenMaxTTL:       auth.Spec.AccessTokenMaxTTL,
 		AccessTokenNumUsesLimit: auth.Spec.AccessTokenNumUsesLimit,
 	}
-	if templateID != "" {
-		return request
-	}
 	request.KubernetesHost = auth.Spec.KubernetesHost
 	request.CACert = caCert
 	request.VerifyTLSCertificate = auth.Spec.VerifyTLSCertificate
 	request.TokenReviewerJWT = tokenReviewerJWT
 	request.TokenReviewMode = string(kubernetesAuthMode(auth.Spec.TokenReviewMode))
 	request.AllowedAudience = auth.Spec.AllowedAudience
-	request.GatewayID = auth.Spec.GatewayID
-	request.GatewayPoolID = auth.Spec.GatewayPoolID
 	return request
 }
 
-func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, templateID, caCert, tokenReviewerJWT string) infisicalclient.KubernetesAuthPatch {
+func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, caCert, tokenReviewerJWT string) infisicalclient.KubernetesAuthPatch {
 	mode := string(kubernetesAuthMode(auth.Spec.TokenReviewMode))
 	allowedNamespaces := joinCSV(auth.Spec.AllowedNamespaces)
 	allowedNames := joinCSV(auth.Spec.AllowedNames)
 	patch := infisicalclient.KubernetesAuthPatch{
-		TemplateID:              stringPointerIfSet(templateID),
 		AllowedNamespaces:       &allowedNamespaces,
 		AllowedNames:            &allowedNames,
 		AccessTokenTTL:          auth.Spec.AccessTokenTTL,
 		AccessTokenMaxTTL:       auth.Spec.AccessTokenMaxTTL,
 		AccessTokenNumUsesLimit: auth.Spec.AccessTokenNumUsesLimit,
-	}
-	if templateID != "" {
-		return patch
 	}
 	patch.TokenReviewMode = &mode
 	if auth.Spec.KubernetesHost != "" {
@@ -229,12 +193,6 @@ func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, te
 	if auth.Spec.AllowedAudience != "" {
 		patch.AllowedAudience = &auth.Spec.AllowedAudience
 	}
-	if auth.Spec.GatewayID != "" {
-		patch.GatewayID = &auth.Spec.GatewayID
-	}
-	if auth.Spec.GatewayPoolID != "" {
-		patch.GatewayPoolID = &auth.Spec.GatewayPoolID
-	}
 	if auth.Spec.AccessTokenTrustedIPs != nil {
 		trustedIPs := kubernetesTrustedIPsFrom(auth.Spec.AccessTokenTrustedIPs)
 		patch.AccessTokenTrustedIPs = &trustedIPs
@@ -243,12 +201,6 @@ func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, te
 }
 
 func validateKubernetesAuthSpec(auth *infisicalv1alpha1.InfisicalKubernetesAuth) error {
-	if auth.Spec.TemplateRef == nil || auth.Spec.TemplateRef.Name == "" {
-		return nil
-	}
-	if auth.Spec.KubernetesHost != "" || auth.Spec.CACertSecretRef != nil || auth.Spec.TokenReviewerJWTSecretRef != nil || auth.Spec.TokenReviewMode != "" || auth.Spec.GatewayID != "" || auth.Spec.GatewayPoolID != "" || auth.Spec.AllowedAudience != "" {
-		return fmt.Errorf("templateRef cannot be combined with kubernetesHost, caCertSecretRef, tokenReviewerJWTSecretRef, tokenReviewMode, gatewayID, gatewayPoolID, or allowedAudience")
-	}
 	return nil
 }
 
@@ -281,10 +233,7 @@ func kubernetesTrustedIPsTo(ips []infisicalclient.TrustedIP) []infisicalv1alpha1
 	return result
 }
 
-func kubernetesAuthNeedsUpdate(auth *infisicalv1alpha1.InfisicalKubernetesAuth, current *infisicalclient.KubernetesAuth, templateID, caCert, tokenReviewerJWT string) bool {
-	if templateID != "" && current.TemplateID != templateID {
-		return true
-	}
+func kubernetesAuthNeedsUpdate(auth *infisicalv1alpha1.InfisicalKubernetesAuth, current *infisicalclient.KubernetesAuth, caCert, tokenReviewerJWT string) bool {
 	if current.AllowedNamespaces != joinCSV(auth.Spec.AllowedNamespaces) || current.AllowedNames != joinCSV(auth.Spec.AllowedNames) {
 		return true
 	}
@@ -295,12 +244,6 @@ func kubernetesAuthNeedsUpdate(auth *infisicalv1alpha1.InfisicalKubernetesAuth, 
 		return true
 	}
 	if auth.Spec.TokenReviewMode != "" && current.TokenReviewMode != string(kubernetesAuthMode(auth.Spec.TokenReviewMode)) {
-		return true
-	}
-	if auth.Spec.GatewayID != "" && current.GatewayID != auth.Spec.GatewayID {
-		return true
-	}
-	if auth.Spec.GatewayPoolID != "" && current.GatewayPoolID != auth.Spec.GatewayPoolID {
 		return true
 	}
 	if auth.Spec.VerifyTLSCertificate != nil && current.VerifyTLSCertificate != *auth.Spec.VerifyTLSCertificate {
@@ -327,18 +270,14 @@ func kubernetesAuthNeedsUpdate(auth *infisicalv1alpha1.InfisicalKubernetesAuth, 
 func (r *InfisicalKubernetesAuthReconciler) setKubernetesAuthObservedState(auth *infisicalv1alpha1.InfisicalKubernetesAuth, observed *infisicalclient.KubernetesAuth, identityID string) {
 	auth.Status.AuthID = observed.ID
 	auth.Status.IdentityID = identityID
-	auth.Status.TemplateID = observed.TemplateID
 	auth.Status.KubernetesHost = observed.KubernetesHost
 	auth.Status.AllowedNamespaces = splitCSV(observed.AllowedNamespaces)
 	auth.Status.AllowedNames = splitCSV(observed.AllowedNames)
 	auth.Status.AllowedAudience = observed.AllowedAudience
 	auth.Status.TokenReviewMode = infisicalv1alpha1.KubernetesTokenReviewMode(observed.TokenReviewMode)
-	auth.Status.GatewayID = observed.GatewayID
-	auth.Status.GatewayPoolID = observed.GatewayPoolID
 	auth.Status.VerifyTLSCertificate = observed.VerifyTLSCertificate
 	auth.Status.HasCACertificate = observed.CACert != ""
 	auth.Status.HasTokenReviewerJWT = observed.TokenReviewerJWT != ""
-	auth.Status.TokenReviewerJWTTemplateSourced = observed.TokenReviewerJWTTemplateSourced
 	auth.Status.AccessTokenTrustedIPs = kubernetesTrustedIPsTo(observed.AccessTokenTrustedIPs)
 	auth.Status.AccessTokenTTL = observed.AccessTokenTTL
 	auth.Status.AccessTokenMaxTTL = observed.AccessTokenMaxTTL
@@ -419,20 +358,6 @@ func (r *InfisicalKubernetesAuthReconciler) SetupWithManager(mgr ctrl.Manager) e
 			for i := range auths.Items {
 				auth := &auths.Items[i]
 				if auth.Spec.IdentityRef.Name == object.GetName() {
-					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(auth)})
-				}
-			}
-			return requests
-		})).
-		Watches(&infisicalv1alpha1.InfisicalIdentityTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
-			var auths infisicalv1alpha1.InfisicalKubernetesAuthList
-			if err := mgr.GetClient().List(ctx, &auths, client.InNamespace(object.GetNamespace())); err != nil {
-				return nil
-			}
-			requests := make([]ctrl.Request, 0)
-			for i := range auths.Items {
-				auth := &auths.Items[i]
-				if auth.Spec.TemplateRef != nil && auth.Spec.TemplateRef.Name == object.GetName() {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(auth)})
 				}
 			}

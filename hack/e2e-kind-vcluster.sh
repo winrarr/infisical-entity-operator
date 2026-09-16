@@ -55,7 +55,7 @@ cleanup() {
   tenant_kubectl -n "${TEST_NAMESPACE}" delete infisicalorganization/other-boundary --ignore-not-found --wait=false >/dev/null 2>&1 || true
   tenant_kubectl -n "${TEST_NAMESPACE}" delete infisicalorganization/tenant-boundary --ignore-not-found --wait=false >/dev/null 2>&1 || true
   tenant_kubectl delete namespace "${TENANT_OPERATOR_NAMESPACE}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  host_kubectl -n "${TEST_NAMESPACE}" delete infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME} --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
+  host_kubectl -n "${TEST_NAMESPACE}" delete "infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME}" --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalidentity/vcluster-tenant-identity --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalproject/vcluster-anchor --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalorganization/vcluster-organization --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
@@ -265,13 +265,13 @@ spec:
     rotationNonce: "${RUN_ID}"
   deletionPolicy: Delete
 EOF
-wait_host_ready infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME}
+wait_host_ready "infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME}"
 tenant_client_id="$(host_kubectl -n "${TEST_NAMESPACE}" get secret "${TENANT_UNIVERSAL_AUTH_SECRET_NAME}" -o jsonpath='{.data.clientId}' | base64 --decode)"
 tenant_client_secret="$(host_kubectl -n "${TEST_NAMESPACE}" get secret "${TENANT_UNIVERSAL_AUTH_SECRET_NAME}" -o jsonpath='{.data.clientSecret}' | base64 --decode)"
 tenant_organization_slug="$(host_kubectl -n "${TEST_NAMESPACE}" get infisicalorganization/vcluster-organization -o jsonpath='{.status.slug}')"
 if [[ -z "${tenant_client_id}" || -z "${tenant_client_secret}" || -z "${tenant_organization_slug}" ]]; then
   echo "Universal Auth resource did not publish complete tenant credentials" >&2
-  host_kubectl -n "${TEST_NAMESPACE}" get infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME} -o yaml >&2 || true
+  host_kubectl -n "${TEST_NAMESPACE}" get "infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME}" -o yaml >&2 || true
   exit 1
 fi
 

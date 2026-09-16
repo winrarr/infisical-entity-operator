@@ -76,19 +76,21 @@ type InfisicalIdentitySpec struct {
 	// +listMapKey=key
 	Metadata []IdentityMetadata `json:"metadata,omitempty"`
 
-	// RoleSlugs declares the permanent project role slugs assigned to the identity.
+	// RoleSlugs declares the permanent built-in project role slugs assigned to the identity.
 	// When omitted, the existing project membership is not managed. Use no-access
 	// explicitly when the identity should have no project permissions.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:Items:Enum=admin;member;viewer;no-access
 	RoleSlugs []string `json:"roleSlugs,omitempty"`
 
-	// OrganizationRole is the Infisical organization role for an organization-scoped identity.
+	// OrganizationRole is the built-in Infisical organization role for an organization-scoped identity.
 	// Leave it empty to use Infisical's least-privilege no-access role. Project-scoped identities
 	// must omit this field.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=admin;member;no-access
 	OrganizationRole string `json:"organizationRole,omitempty"`
 
 	// ProjectRoleBindings grants an organization-scoped identity roles in selected projects.
@@ -156,6 +158,7 @@ type IdentityProjectRoleBinding struct {
 	// RoleSlugs is the complete permanent role set for this project membership.
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:Items:Enum=admin;member;viewer;no-access
 	RoleSlugs []string `json:"roleSlugs"`
 }
 
@@ -177,10 +180,10 @@ type IdentityRoleStatus struct {
 	// RoleID is the Infisical role assignment identifier.
 	RoleID string `json:"roleID,omitempty"`
 
-	// Slug is the built-in or custom role slug.
+	// Slug is the observed project role slug.
 	Slug string `json:"slug,omitempty"`
 
-	// Name is the custom role display name when available.
+	// Name is the observed project role name when available.
 	Name string `json:"name,omitempty"`
 
 	// IsTemporary reports whether Infisical marked the assignment as temporary.

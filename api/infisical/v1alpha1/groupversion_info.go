@@ -44,10 +44,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&InfisicalOrganizationList{},
 		&InfisicalProject{},
 		&InfisicalProjectList{},
-		&InfisicalProjectTemplate{},
-		&InfisicalProjectTemplateList{},
-		&InfisicalIdentityTemplate{},
-		&InfisicalIdentityTemplateList{},
 		&InfisicalUniversalAuth{},
 		&InfisicalUniversalAuthList{},
 		&InfisicalIdentity{},
@@ -56,8 +52,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&InfisicalEnvironmentList{},
 		&InfisicalKubernetesAuth{},
 		&InfisicalKubernetesAuthList{},
-		&InfisicalProjectRole{},
-		&InfisicalProjectRoleList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

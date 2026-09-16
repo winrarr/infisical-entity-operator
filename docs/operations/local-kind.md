@@ -19,8 +19,7 @@ The command:
 - installs the CRDs and operator chart;
 - applies the standard `config/network-policy/allow-infisical-egress-network-policy.yaml`;
 - creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
-- creates a project-template resource and uses it for the primary project when the local Infisical plan permits templates; otherwise it records the plan restriction and verifies ordinary project reconciliation;
-- creates project-role and Kubernetes Auth resources and verifies their external error handling when the local Infisical plan rejects custom roles or cluster-local Kubernetes review URLs;
+- creates a Kubernetes Auth resource and verifies it when the local Infisical API accepts the configured review endpoint; the standalone chart may reject the cluster-local URL;
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
 
 The default Kind CNI makes this a fast reconciliation test. It does not provide evidence that NetworkPolicy rules are enforced; that depends on the installed CNI. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The default and Cilium modes use the same named cluster, so run `make kind-down` before switching between them.
@@ -37,7 +36,6 @@ The multi-tenancy targets use the bootstrap user credentials stored in `infisica
 kubectl get pods -A
 kubectl get networkpolicy -n infisical-entity-operator-system
 kubectl describe infisicalproject e2e-project -n infisical-entity-operator-e2e
-kubectl describe infisicalprojectrole e2e-project-role -n infisical-entity-operator-e2e
 kubectl describe infisicalkubernetesauth e2e-kubernetes-auth -n infisical-entity-operator-e2e
 kubectl logs deployment/infisical-entity-operator-infisical-entity-operator -n infisical-entity-operator-system
 kubectl logs job/infisical-bootstrap-1 -n infisical
