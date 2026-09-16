@@ -2,6 +2,21 @@
 
 The Helm chart is the primary installation path. It installs the operator Deployment, RBAC, ServiceAccount, and all seven free-tier CRDs.
 
+## Install a released chart
+
+The published chart is the recommended installation path for a released version:
+
+```sh
+helm upgrade --install infisical-entity-operator \
+  oci://ghcr.io/winrarr/charts/infisical-entity-operator \
+  --version 0.1.0 \
+  --namespace infisical-entity-operator-system \
+  --create-namespace \
+  --wait
+```
+
+See [releases](../contributing/releases.md) for the publication flow and artifact locations.
+
 ## Install from a checkout
 
 ```sh
@@ -9,6 +24,7 @@ helm upgrade --install infisical-entity-operator \
   ./charts/infisical-entity-operator \
   --namespace infisical-entity-operator-system \
   --create-namespace \
+  --set image.tag=dev \
   --wait
 ```
 
@@ -33,6 +49,7 @@ Upgrade with the same release name and namespace:
 helm upgrade infisical-entity-operator \
   ./charts/infisical-entity-operator \
   --namespace infisical-entity-operator-system \
+  --set image.tag=dev \
   --wait
 ```
 

@@ -17,6 +17,7 @@ helm upgrade --install infisical-entity-operator \
   ./charts/infisical-entity-operator \
   --namespace infisical-entity-operator-system \
   --create-namespace \
+  --set image.tag=dev \
   --wait
 ```
 

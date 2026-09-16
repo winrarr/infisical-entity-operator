@@ -8,4 +8,4 @@ Before submitting a change, run:
 make check
 ```
 
-Read [local development](local-development.md) for the code and test loop, and [documentation](documentation.md) when changing the published site.
+Read [local development](local-development.md) for the code and test loop, [documentation](documentation.md) when changing the published site, and [releases](releases.md) when publishing a versioned image and chart.

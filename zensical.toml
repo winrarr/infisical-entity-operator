@@ -61,6 +61,7 @@ nav = [
     "contributing/index.md",
     { "Local Development" = "contributing/local-development.md" },
     { "Documentation" = "contributing/documentation.md" },
+    { "Releases" = "contributing/releases.md" },
   ] },
 ]
 
