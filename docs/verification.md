@@ -15,7 +15,7 @@ This project has both local controller tests and a disposable live environment. 
 | `make docs-build` | The generated API reference and Zensical site build succeed with strict link validation. |
 | `make check` | The complete local static suite: generation, formatting, vet, tests, lint, Helm lint, and documentation build. |
 | `make build` | The controller binary can be built from the current source and generated artifacts. |
-| `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, API-server validation rejection checks, and the live single-organization reconciliation path. The setup overlaps independent image, cluster, and operator preparation and uses committed artifacts without documentation generation. |
+| `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, and one representative live reconciliation path. The setup overlaps independent image, cluster, and operator preparation and uses committed artifacts without documentation generation. |
 | `make kind-kubernetes-auth-e2e KUBERNETES_AUTH_REVIEW_URL=...` | Runs the full Kubernetes Auth acceptance with a reachable review endpoint, including an allowed and a rejected service-account login. This is an opt-in local tunnel path because the standalone Infisical chart may reject the cluster-local URL. |
 | `make kind-vcluster-e2e` | A core operator creates an Infisical organization and machine identity, then an operator inside a vCluster adopts that organization and creates a project with the tenant credential. |
 | `make kind-capsule-e2e` | One cluster-wide operator reconciles two Capsule tenants with separate organization credentials while Kyverno rejects a cross-tenant organization reference. |
@@ -23,6 +23,10 @@ This project has both local controller tests and a disposable live environment. 
 | `make kind-down` | Only the named disposable Kind cluster is removed. |
 
 CI uses the same repository commands: the test workflow checks generated output and runs `make test`, the lint workflow runs `make lint-config lint helm-lint`, the docs workflow runs `make docs-build` and deploys the result from `main`, and the e2e workflow runs `make kind-e2e` followed by cleanup.
+
+## Test boundaries
+
+The Go tests are the primary coverage for controller lifecycle behavior, including adoption, drift correction, deletion, credential rotation, dependency handling, and recovery. The default Kind workflow is intentionally a smoke test for the packaged deployment and one representative live reconciliation. Kubernetes Auth, vCluster, Capsule, Kyverno, and Cilium scenarios remain opt-in because they validate external integration boundaries rather than every controller branch.
 
 ## kstatus compatibility
 
@@ -34,9 +38,9 @@ See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-u
 
 Unit and HTTP contract tests use fake Kubernetes clients and `httptest` servers. They prove request construction, response decoding, dependency handling, status transitions, drift correction, finalizers, and error classification without requiring a live Infisical account.
 
-The default-CNI Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, application of the standard egress policy manifest, and live free-tier project, environment, organization-scoped identity, built-in role membership, and Universal Auth reconciliation. It does not prove NetworkPolicy enforcement because that depends on the CNI. The opt-in Kubernetes Auth workflow additionally verifies that a reachable review endpoint accepts the allowed service account and rejects the disallowed one. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference.
+The default-CNI Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, application of the standard egress policy manifest, and live free-tier project, environment, and project-scoped identity reconciliation. It intentionally remains a smoke test and does not prove NetworkPolicy enforcement because that depends on the CNI. The opt-in Kubernetes Auth workflow additionally verifies that a reachable review endpoint accepts the allowed service account and rejects the disallowed one. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference.
 
-The default local workflow records the standalone chart's local-IP URL limitation and continues; the opt-in workflow fails instead. The token-review JWT and CA data used by either test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
+The default local workflow does not configure Kubernetes Auth; the opt-in workflow fails on an unavailable review endpoint instead. The token-review JWT and CA data used by the opt-in test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
 
 ## Generated output and repository hygiene
 

@@ -20,11 +20,11 @@ The command:
 - builds and loads the operator image while the independent cluster services start;
 - installs the CRDs and operator chart;
 - applies the standard `config/network-policy/allow-infisical-egress-network-policy.yaml`;
-- creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
-- creates a Kubernetes Auth resource and verifies it when the local Infisical API accepts the configured review endpoint; the standalone chart may reject the cluster-local URL;
-- runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
+- creates a connection, project, project-scoped identity, and environment and waits for them to become `Ready=True`;
+- leaves Kubernetes Auth out of the default smoke test because the standalone chart may reject the cluster-local review URL;
+- creates and verifies Kubernetes Auth only when `KUBERNETES_AUTH_REVIEW_URL` is supplied by the opt-in target.
 
-The standard target intentionally keeps the cluster-local URL limitation visible. To run the complete Kubernetes Auth acceptance, expose the disposable Kind API server through a public HTTPS URL that Infisical can reach, then use the opt-in target:
+The default smoke test omits Kubernetes Auth so it is independent of the standalone chart's cluster-local URL limitation. To run the complete Kubernetes Auth acceptance, expose the disposable Kind API server through a public HTTPS URL that Infisical can reach, then use the opt-in target:
 
 ```sh
 api_server_url="$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}')"
@@ -39,7 +39,7 @@ make kind-kubernetes-auth-e2e
 
 The opt-in target fails on any Kubernetes Auth reconciliation error; it does not accept the standalone chart's local-IP validation message. It then logs in with the allowed service account, verifies that the disallowed service account is rejected, and removes the test namespace. The reviewer JWT, CA data, and all credentials remain in cluster Secrets or process memory and must never be copied into the checkout.
 
-The default Kind CNI makes this a fast reconciliation test. It does not provide evidence that NetworkPolicy rules are enforced; that depends on the installed CNI. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The default and Cilium modes use the same named cluster, so run `make kind-down` before switching between them.
+The default Kind CNI makes this a fast smoke test. It does not provide evidence that NetworkPolicy rules are enforced; that depends on the installed CNI. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The default and Cilium modes use the same named cluster, so run `make kind-down` before switching between them.
 
 The E2E deployment consumes committed CRD and chart artifacts, so it does not run documentation generation. Its independent image, cluster, and operator preparation tasks run in parallel; adjust the worker count with `KIND_PARALLEL_JOBS` when needed.
 
