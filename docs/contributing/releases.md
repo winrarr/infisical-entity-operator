@@ -4,7 +4,7 @@ Releases are paired operator and Helm chart artifacts published to GitHub Contai
 
 The tag version must match both `version` and `appVersion` in `charts/infisical-entity-operator/Chart.yaml`. A release publishes:
 
-- `ghcr.io/winrarr/infisical-entity-operator:X.Y.Z` and `:vX.Y.Z` for `linux/amd64` and `linux/arm64`;
+- `ghcr.io/winrarr/infisical-entity-operator:X.Y.Z` and `:vX.Y.Z` for `linux/amd64`;
 - `oci://ghcr.io/winrarr/charts/infisical-entity-operator:X.Y.Z`;
 - a GitHub Release with the packaged chart and generated release notes.
 
@@ -25,7 +25,7 @@ git push origin v0.1.0
 
 The metadata check can also be run locally with `make validate-release RELEASE_TAG=v0.1.0`.
 
-The `Publish Release` workflow validates the tag and chart metadata, confirms that the tagged commit is contained in `main`, verifies generated artifacts and the chart, builds the multi-platform image, packages and publishes the chart, and creates the GitHub Release.
+The `Publish Release` workflow validates the tag and chart metadata, confirms that the tagged commit is contained in `main`, verifies generated artifacts and the chart, builds the native `linux/amd64` image, packages and publishes the chart, and creates the GitHub Release. This follows the current Dockerfile’s supported build path; multi-architecture publication can be added after the builder is explicitly cross-compilation-safe.
 
 Install a released chart with:
 
