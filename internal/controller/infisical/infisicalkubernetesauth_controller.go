@@ -18,6 +18,8 @@ package infisical
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"reflect"
 	"sort"
 	"strings"
@@ -201,6 +203,99 @@ func kubernetesAuthPatchFrom(auth *infisicalv1alpha1.InfisicalKubernetesAuth, ca
 }
 
 func validateKubernetesAuthSpec(auth *infisicalv1alpha1.InfisicalKubernetesAuth) error {
+	if auth == nil {
+		return fmt.Errorf("InfisicalKubernetesAuth is required")
+	}
+	if strings.TrimSpace(auth.Spec.ConnectionRef.Name) == "" {
+		return fmt.Errorf("connectionRef.name is required")
+	}
+	if strings.TrimSpace(auth.Spec.IdentityRef.Name) == "" {
+		return fmt.Errorf("identityRef.name is required")
+	}
+	if err := validateKubernetesAuthValues(auth.Spec.AllowedNamespaces, "allowedNamespaces"); err != nil {
+		return err
+	}
+	if err := validateKubernetesAuthValues(auth.Spec.AllowedNames, "allowedNames"); err != nil {
+		return err
+	}
+	if auth.Spec.KubernetesHost != "" && strings.TrimSpace(auth.Spec.KubernetesHost) != auth.Spec.KubernetesHost {
+		return fmt.Errorf("kubernetesHost must not have leading or trailing whitespace")
+	}
+	if strings.ContainsAny(auth.Spec.KubernetesHost, "\t\r\n ") {
+		return fmt.Errorf("kubernetesHost must not contain whitespace")
+	}
+	if mode := kubernetesAuthMode(auth.Spec.TokenReviewMode); mode != infisicalv1alpha1.KubernetesTokenReviewModeAPI {
+		return fmt.Errorf("tokenReviewMode %q is unsupported; only api is available in the free-tier API", auth.Spec.TokenReviewMode)
+	}
+	if auth.Spec.VerifyTLSCertificate != nil {
+		if *auth.Spec.VerifyTLSCertificate && auth.Spec.CACertSecretRef == nil {
+			return fmt.Errorf("caCertSecretRef is required when verifyTLSCertificate is true")
+		}
+		if !*auth.Spec.VerifyTLSCertificate && auth.Spec.CACertSecretRef != nil {
+			return fmt.Errorf("caCertSecretRef cannot be set when verifyTLSCertificate is false")
+		}
+	}
+	if auth.Spec.CACertSecretRef != nil && strings.TrimSpace(auth.Spec.CACertSecretRef.Name) == "" {
+		return fmt.Errorf("caCertSecretRef.name is required")
+	}
+	if auth.Spec.TokenReviewerJWTSecretRef != nil && strings.TrimSpace(auth.Spec.TokenReviewerJWTSecretRef.Name) == "" {
+		return fmt.Errorf("tokenReviewerJWTSecretRef.name is required")
+	}
+	if err := validateKubernetesTrustedIPs(auth.Spec.AccessTokenTrustedIPs); err != nil {
+		return err
+	}
+	if err := validateKubernetesAuthDuration(auth.Spec.AccessTokenTTL, "accessTokenTTL"); err != nil {
+		return err
+	}
+	if err := validateKubernetesAuthDuration(auth.Spec.AccessTokenMaxTTL, "accessTokenMaxTTL"); err != nil {
+		return err
+	}
+	if auth.Spec.AccessTokenNumUsesLimit != nil && *auth.Spec.AccessTokenNumUsesLimit < 0 {
+		return fmt.Errorf("accessTokenNumUsesLimit must not be negative")
+	}
+	return nil
+}
+
+func validateKubernetesAuthValues(values []string, field string) error {
+	if len(values) == 0 {
+		return fmt.Errorf("%s must contain at least one value", field)
+	}
+	for i, value := range values {
+		if value == "" || strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s[%d] must not be empty", field, i)
+		}
+		if value != strings.TrimSpace(value) {
+			return fmt.Errorf("%s[%d] must not have leading or trailing whitespace", field, i)
+		}
+	}
+	return nil
+}
+
+func validateKubernetesTrustedIPs(values []infisicalv1alpha1.KubernetesTrustedIP) error {
+	for i, value := range values {
+		if value.IPAddress == "" || strings.TrimSpace(value.IPAddress) == "" {
+			return fmt.Errorf("accessTokenTrustedIPs[%d].ipAddress must not be empty", i)
+		}
+		if value.IPAddress != strings.TrimSpace(value.IPAddress) {
+			return fmt.Errorf("accessTokenTrustedIPs[%d].ipAddress must not have leading or trailing whitespace", i)
+		}
+		if net.ParseIP(value.IPAddress) != nil {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(value.IPAddress); err != nil {
+			return fmt.Errorf("accessTokenTrustedIPs[%d].ipAddress %q must be an IP address or CIDR range", i, value.IPAddress)
+		}
+	}
+	return nil
+}
+
+func validateKubernetesAuthDuration(value *int64, field string) error {
+	if value == nil {
+		return nil
+	}
+	if *value < 0 || *value > 315360000 {
+		return fmt.Errorf("%s must be between 0 and 315360000 seconds", field)
+	}
 	return nil
 }
 

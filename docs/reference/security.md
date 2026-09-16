@@ -10,13 +10,11 @@ The operator is a control-plane integration. It does not synchronize Infisical s
 
 ## Kubernetes permissions
 
-The default chart uses a cluster-wide manager because the operator watches namespaced custom resources across the cluster. Its ClusterRole can read Secrets and manage these CRDs in all namespaces. This is a deliberate trusted-platform deployment choice, not a Kubernetes tenant-isolation claim.
+The default chart uses a cluster-wide manager because the operator watches namespaced custom resources across the cluster. Its ClusterRole can read Secrets and manage these CRDs in all namespaces. This is a deliberate trusted-platform deployment choice: tenants may be mutually untrusted, but the platform team operating the manager is trusted with the tenant namespaces and credentials.
 
 For tenant principals, the platform creates one top-level Infisical organization per tenant and an organization-scoped machine identity inside it. Set `organizationRole: admin` when the tenant must create its own projects; the identity can then create any project in that organization but cannot access another organization. The operator grants that creating identity project-admin membership on organization-bound projects so it can manage their children. `InfisicalProject.spec.organizationRef` and `InfisicalIdentity.spec.organizationRef` make the intended boundary explicit, and the controllers reject mismatched observed organization IDs. This is still not a Kubernetes admission boundary: Kubernetes RBAC, Capsule, Kyverno, or the per-vCluster deployment boundary must restrict which CRs a tenant can submit.
 
-The recommended vCluster model is one operator deployment per tenant cluster, using a machine-identity credential created by the trusted platform installation. The tenant operator’s Kubernetes RBAC and Infisical roles are the enforcement boundary. A shared cluster-wide operator should be treated as trusted because its cache and Secret permissions span namespaces.
-
-Run namespace-scoped deployments and narrower RBAC only after completing that evaluation. Do not introduce cross-namespace references or shared bearer-token Secrets as a shortcut.
+The recommended vCluster model is one operator deployment per tenant cluster, using a machine-identity credential created by the trusted platform installation. The tenant operator’s Kubernetes RBAC and Infisical roles are the enforcement boundary. For Capsule or similar shared clusters, the trusted platform operator may reconcile all namespaces; tenant admission and namespace RBAC must still restrict which CRs each tenant can submit. Do not introduce cross-namespace references or shared bearer-token Secrets as a shortcut.
 
 ## Network and runtime posture
 

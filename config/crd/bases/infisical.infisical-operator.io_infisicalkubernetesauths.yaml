@@ -190,6 +190,13 @@ spec:
               rule: '!has(oldSelf.connectionRef) || self.connectionRef == oldSelf.connectionRef'
             - message: identityRef is immutable; delete and recreate the InfisicalKubernetesAuth
               rule: '!has(oldSelf.identityRef) || self.identityRef == oldSelf.identityRef'
+            - message: caCertSecretRef cannot be set when verifyTLSCertificate is
+                false
+              rule: '!has(self.verifyTLSCertificate) || self.verifyTLSCertificate
+                || !has(self.caCertSecretRef)'
+            - message: caCertSecretRef is required when verifyTLSCertificate is true
+              rule: '!has(self.verifyTLSCertificate) || !self.verifyTLSCertificate
+                || has(self.caCertSecretRef)'
           status:
             description: Status defines the observed state of InfisicalKubernetesAuth.
             properties:

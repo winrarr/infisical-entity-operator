@@ -15,7 +15,8 @@ This project has both local controller tests and a disposable live environment. 
 | `make docs-build` | The generated API reference and Zensical site build succeed with strict link validation. |
 | `make check` | The complete local static suite: generation, formatting, vet, tests, lint, Helm lint, and documentation build. |
 | `make build` | The controller binary can be built from the current source and generated artifacts. |
-| `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, and the live single-organization reconciliation path. The setup overlaps independent image, cluster, and operator preparation and uses committed artifacts without documentation generation. |
+| `make kind-e2e` | The disposable Kind cluster can run Kind's default CNI, Infisical, the chart, the operator, the standard egress policy manifest, API-server validation rejection checks, and the live single-organization reconciliation path. The setup overlaps independent image, cluster, and operator preparation and uses committed artifacts without documentation generation. |
+| `make kind-kubernetes-auth-e2e KUBERNETES_AUTH_REVIEW_URL=...` | Runs the full Kubernetes Auth acceptance with a reachable review endpoint, including an allowed and a rejected service-account login. This is an opt-in local tunnel path because the standalone Infisical chart may reject the cluster-local URL. |
 | `make kind-vcluster-e2e` | A core operator creates an Infisical organization and machine identity, then an operator inside a vCluster adopts that organization and creates a project with the tenant credential. |
 | `make kind-capsule-e2e` | One cluster-wide operator reconciles two Capsule tenants with separate organization credentials while Kyverno rejects a cross-tenant organization reference. |
 | `make kind-multitenancy-e2e` | Runs both tenant-boundary scenarios in sequence. |
@@ -25,7 +26,7 @@ CI uses the same repository commands: the test workflow checks generated output 
 
 ## kstatus compatibility
 
-All seven CRDs expose a Kubernetes `Ready` condition and `status.observedGeneration`, so tools using kstatus’s generic fallback can recognize `Ready=True` as current and `Ready=False` as in progress. They do not currently emit kstatus’s standard abnormal-true `Reconciling` and `Stalled` conditions, so a failed external reconcile is not classified as kstatus `Failed` by the generic condition rules. A full kstatus condition migration would be a separate compatibility change.
+All seven CRDs expose Kubernetes `Ready`, `Reconciling`, and `Stalled` conditions with `status.observedGeneration`. Successful reconciles report `Ready=True`; dependency and retryable external failures report `Reconciling=True`; invalid configuration, ownership mismatches, and forbidden creates report `Stalled=True`. This lets generic kstatus consumers classify resources without controller-specific condition conventions.
 
 See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md) for the external interpretation.
 
@@ -33,9 +34,9 @@ See the [kstatus condition conventions](https://github.com/kubernetes-sigs/cli-u
 
 Unit and HTTP contract tests use fake Kubernetes clients and `httptest` servers. They prove request construction, response decoding, dependency handling, status transitions, drift correction, finalizers, and error classification without requiring a live Infisical account.
 
-The default-CNI Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, application of the standard egress policy manifest, and live free-tier project, environment, organization-scoped identity, built-in role membership, and Universal Auth reconciliation. It does not prove NetworkPolicy enforcement because that depends on the CNI. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference. The standalone local Infisical chart may reject the cluster-local Kubernetes review URL because of its URL policy; the script records that known environment limitation and continues.
+The default-CNI Kind workflow adds deployment evidence: CRDs and chart installation, manager-to-API connectivity, application of the standard egress policy manifest, and live free-tier project, environment, organization-scoped identity, built-in role membership, and Universal Auth reconciliation. It does not prove NetworkPolicy enforcement because that depends on the CNI. The opt-in Kubernetes Auth workflow additionally verifies that a reachable review endpoint accepts the allowed service account and rejects the disallowed one. The vCluster workflow additionally verifies organization creation, Universal Auth issuance, tenant-side organization adoption, and tenant-created projects. The Capsule workflow verifies separate tenant credentials, shared-manager reconciliation, and Kyverno admission of the explicit organization reference.
 
-Kubernetes Auth allow/deny login checks run only when the local API accepts the configured review endpoint. The token-review JWT and CA data used by the test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
+The default local workflow records the standalone chart's local-IP URL limitation and continues; the opt-in workflow fails instead. The token-review JWT and CA data used by either test are generated or stored inside the cluster and must never be copied into the checkout, logs, status, or documentation.
 
 ## Generated output and repository hygiene
 

@@ -2,6 +2,8 @@
 
 The local environment is disposable and isolated. The fast `kind-e2e` path uses Kind's default CNI, the official Infisical standalone chart with in-cluster PostgreSQL and Redis, and the operator chart built from the checkout. Cilium remains available by overriding the setup with `KIND_CNI=cilium`.
 
+Kind Make targets verify that the current kubectl context is `kind-infisical-entity-operator` (or the value of `KIND_CLUSTER`) before installing anything. Switch contexts explicitly when another local cluster is active.
+
 ## Start and test
 
 ```sh
@@ -21,6 +23,21 @@ The command:
 - creates connection, two projects, an explicit organization adoption resource, a project-scoped identity, an organization-scoped tenant identity with memberships in both projects, and environment resources and waits for them to become `Ready=True`;
 - creates a Kubernetes Auth resource and verifies it when the local Infisical API accepts the configured review endpoint; the standalone chart may reject the cluster-local URL;
 - runs the Kubernetes Auth allowed/disallowed service-account login checks when the local Infisical API accepts the configured review endpoint.
+
+The standard target intentionally keeps the cluster-local URL limitation visible. To run the complete Kubernetes Auth acceptance, expose the disposable Kind API server through a public HTTPS URL that Infisical can reach, then use the opt-in target:
+
+```sh
+api_server_url="$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}')"
+cloudflared tunnel --url "${api_server_url}" --no-tls-verify --no-autoupdate
+
+KUBERNETES_AUTH_REVIEW_URL=https://<generated>.trycloudflare.com \\
+KUBERNETES_AUTH_VERIFY_TLS=false \\
+make kind-kubernetes-auth-e2e
+```
+
+`cloudflared` is only needed for this local acceptance path and is not a project dependency. The Quick Tunnel terminates TLS before forwarding to the disposable Kind API server, so the example disables certificate verification for that tunnel only. A production endpoint should use a stable HTTPS name and `KUBERNETES_AUTH_VERIFY_TLS=true` with the Kubernetes CA configured as usual.
+
+The opt-in target fails on any Kubernetes Auth reconciliation error; it does not accept the standalone chart's local-IP validation message. It then logs in with the allowed service account, verifies that the disallowed service account is rejected, and removes the test namespace. The reviewer JWT, CA data, and all credentials remain in cluster Secrets or process memory and must never be copied into the checkout.
 
 The default Kind CNI makes this a fast reconciliation test. It does not provide evidence that NetworkPolicy rules are enforced; that depends on the installed CNI. Use `make kind-up KIND_CNI=cilium` when a local scenario needs Cilium. The default and Cilium modes use the same named cluster, so run `make kind-down` before switching between them.
 

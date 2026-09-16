@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -42,6 +43,8 @@ const (
 	externalRetry         = 30 * time.Second
 	driftDetectionEvery   = 2 * time.Minute
 	readyCondition        = "Ready"
+	reconcilingCondition  = "Reconciling"
+	stalledCondition      = "Stalled"
 	infisicalAdminRole    = "admin"
 	infisicalNoAccessRole = "no-access"
 )
@@ -72,6 +75,9 @@ func infisicalClientForConnection(ctx context.Context, kubeClient client.Client,
 			return nil, newDependencyError("InfisicalConnection %s/%s was not found", namespace, ref.Name)
 		}
 		return nil, fmt.Errorf("get InfisicalConnection %s/%s: %w", namespace, ref.Name, err)
+	}
+	if err := validateConnectionSpec(&connection); err != nil {
+		return nil, err
 	}
 
 	hostAPI := connection.Spec.HostAPI
@@ -109,6 +115,44 @@ func infisicalClientForConnection(ctx context.Context, kubeClient client.Client,
 		return nil, err
 	}
 	return infisicalclient.NewWithUniversalAuth(hostAPI, clientID, clientSecret, connection.Spec.UniversalAuth.OrganizationSlug, timeout)
+}
+
+func validateConnectionSpec(connection *infisicalv1alpha1.InfisicalConnection) error {
+	if connection == nil {
+		return errors.New("InfisicalConnection is required")
+	}
+
+	hasBearerToken := connection.Spec.AuthSecretRef != nil
+	hasUniversalAuth := connection.Spec.UniversalAuth != nil
+	if hasBearerToken == hasUniversalAuth {
+		return errors.New("exactly one of authSecretRef or universalAuth must be configured")
+	}
+	if hasBearerToken && strings.TrimSpace(connection.Spec.AuthSecretRef.Name) == "" {
+		return errors.New("authSecretRef.name is required")
+	}
+	if hasUniversalAuth && strings.TrimSpace(connection.Spec.UniversalAuth.SecretRef.Name) == "" {
+		return errors.New("universalAuth.secretRef.name is required")
+	}
+
+	if hostAPI := strings.TrimRight(strings.TrimSpace(connection.Spec.HostAPI), "/"); hostAPI != "" {
+		parsed, err := url.Parse(hostAPI)
+		if err != nil {
+			return fmt.Errorf("parse Infisical API URL: %w", err)
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			return fmt.Errorf("infisical API URL must use http or https, got %q", parsed.Scheme)
+		}
+		if parsed.Host == "" {
+			return errors.New("infisical API URL has no host")
+		}
+		if parsed.RawQuery != "" || parsed.Fragment != "" {
+			return errors.New("infisical API URL must not contain a query or fragment")
+		}
+	}
+	if connection.Spec.RequestTimeout != nil && connection.Spec.RequestTimeout.Duration <= 0 {
+		return errors.New("requestTimeout must be greater than zero")
+	}
+	return nil
 }
 
 func connectionReferencesSecret(connection *infisicalv1alpha1.InfisicalConnection, name string) bool {
@@ -185,9 +229,28 @@ func canCreate(policy infisicalv1alpha1.CreationPolicy) bool {
 }
 
 func setCondition(conditions *[]metav1.Condition, generation int64, status metav1.ConditionStatus, reason, message string) {
+	setSingleCondition(conditions, readyCondition, generation, status, reason, message)
+
+	if status == metav1.ConditionTrue {
+		setSingleCondition(conditions, reconcilingCondition, generation, metav1.ConditionFalse, "ReconciliationSucceeded", "reconciliation completed")
+		setSingleCondition(conditions, stalledCondition, generation, metav1.ConditionFalse, "NotStalled", "reconciliation can continue")
+		return
+	}
+
+	if isStalledReason(reason) {
+		setSingleCondition(conditions, reconcilingCondition, generation, metav1.ConditionFalse, "Stalled", "reconciliation is blocked until the resource is corrected")
+		setSingleCondition(conditions, stalledCondition, generation, metav1.ConditionTrue, reason, message)
+		return
+	}
+
+	setSingleCondition(conditions, reconcilingCondition, generation, metav1.ConditionTrue, "Progressing", "reconciliation is waiting for a dependency or retrying after an external error")
+	setSingleCondition(conditions, stalledCondition, generation, metav1.ConditionFalse, "NotStalled", "reconciliation can continue")
+}
+
+func setSingleCondition(conditions *[]metav1.Condition, conditionType string, generation int64, status metav1.ConditionStatus, reason, message string) {
 	for i := range *conditions {
 		condition := &(*conditions)[i]
-		if condition.Type != readyCondition {
+		if condition.Type != conditionType {
 			continue
 		}
 		if condition.Status == status && condition.Reason == reason && condition.Message == message && condition.ObservedGeneration == generation {
@@ -198,7 +261,7 @@ func setCondition(conditions *[]metav1.Condition, generation int64, status metav
 			transitionTime = condition.LastTransitionTime
 		}
 		*condition = metav1.Condition{
-			Type:               readyCondition,
+			Type:               conditionType,
 			Status:             status,
 			ObservedGeneration: generation,
 			LastTransitionTime: transitionTime,
@@ -208,13 +271,23 @@ func setCondition(conditions *[]metav1.Condition, generation int64, status metav
 		return
 	}
 	*conditions = append(*conditions, metav1.Condition{
-		Type:               readyCondition,
+		Type:               conditionType,
 		Status:             status,
 		ObservedGeneration: generation,
 		LastTransitionTime: metav1.Now(),
 		Reason:             reason,
 		Message:            message,
 	})
+}
+
+func isStalledReason(reason string) bool {
+	switch reason {
+	case "ConfigurationInvalid", "InvalidSpec", "RoleConfigurationInvalid", "CreationNotAllowed",
+		"ExternalProjectMismatch", "ExternalIdentityMismatch", "ExternalOrganizationMismatch", "ExternalAuthMismatch":
+		return true
+	default:
+		return false
+	}
 }
 
 func conditionReady(conditions []metav1.Condition) bool {

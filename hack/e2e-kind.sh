@@ -9,7 +9,23 @@ E2E_NETWORKING=${E2E_NETWORKING:-default-cni}
 NETWORK_POLICY_FILE=${NETWORK_POLICY_FILE:-config/network-policy/allow-infisical-egress-network-policy.yaml}
 REVIEWER_SERVICE_ACCOUNT=${REVIEWER_SERVICE_ACCOUNT:-infisical-auth-reviewer}
 REVIEWER_BINDING=${REVIEWER_BINDING:-infisical-auth-reviewer}
+KUBERNETES_AUTH_REVIEW_URL=${KUBERNETES_AUTH_REVIEW_URL:-https://kubernetes.default.svc}
+KUBERNETES_AUTH_VERIFY_TLS=${KUBERNETES_AUTH_VERIFY_TLS:-true}
+KUBERNETES_AUTH_EXPECTED_FAILURE=${KUBERNETES_AUTH_EXPECTED_FAILURE-"Local IPs not allowed as URL"}
 port_forward_pid=""
+
+case "${KUBERNETES_AUTH_VERIFY_TLS}" in
+  true|false) ;;
+  *)
+    echo "KUBERNETES_AUTH_VERIFY_TLS must be true or false" >&2
+    exit 1
+    ;;
+esac
+
+kubernetes_ca_cert_ref=""
+if [[ "${KUBERNETES_AUTH_VERIFY_TLS}" == true ]]; then
+  kubernetes_ca_cert_ref=$'  caCertSecretRef:\n    name: e2e-kubernetes-ca\n    key: ca.crt'
+fi
 
 if [[ ! -f "${NETWORK_POLICY_FILE}" ]]; then
   echo "Network policy manifest does not exist: ${NETWORK_POLICY_FILE}" >&2
@@ -47,7 +63,7 @@ wait_for_ready_or_known_block() {
       return 0
     fi
     message="$(${KUBECTL} -n "${TEST_NAMESPACE}" get "${resource}" -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null || true)"
-    if [[ "${message}" == *"${known_message}"* ]]; then
+    if [[ -n "${known_message}" && "${message}" == *"${known_message}"* ]]; then
       echo "${label} is unavailable in this local Infisical configuration: ${message}"
       return 2
     fi
@@ -58,7 +74,74 @@ wait_for_ready_or_known_block() {
   return 1
 }
 
+assert_api_rejects() {
+  local label="$1"
+  local expected="$2"
+  local output
+  if output="$(${KUBECTL} apply --dry-run=server -f - 2>&1)"; then
+    echo "${label} was unexpectedly accepted by the Kubernetes API server" >&2
+    return 1
+  fi
+  if [[ "${output}" != *"${expected}"* ]]; then
+    echo "${label} was rejected with an unexpected error: ${output}" >&2
+    return 1
+  fi
+  echo "${label} was rejected by the Kubernetes API server"
+}
+
 "${KUBECTL}" create namespace "${TEST_NAMESPACE}" --dry-run=client -o yaml | "${KUBECTL}" apply -f - >/dev/null
+
+assert_api_rejects "organizationID with creationPolicy Create" "organizationID cannot be set with creationPolicy Create" <<EOF
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalOrganization
+metadata:
+  name: invalid-organization
+  namespace: ${TEST_NAMESPACE}
+spec:
+  connectionRef:
+    name: infisical
+  organizationID: org-1
+  creationPolicy: Create
+EOF
+
+assert_api_rejects "Kubernetes Auth TLS verification without a CA" "caCertSecretRef is required when verifyTLSCertificate is true" <<EOF
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalKubernetesAuth
+metadata:
+  name: invalid-kubernetes-auth
+  namespace: ${TEST_NAMESPACE}
+spec:
+  connectionRef:
+    name: infisical
+  identityRef:
+    name: e2e-identity
+  allowedNamespaces:
+    - ${TEST_NAMESPACE}
+  allowedNames:
+    - e2e-authenticated
+  verifyTLSCertificate: true
+EOF
+
+assert_api_rejects "Kubernetes Auth CA with disabled TLS verification" "caCertSecretRef cannot be set when verifyTLSCertificate is false" <<EOF
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalKubernetesAuth
+metadata:
+  name: invalid-kubernetes-auth
+  namespace: ${TEST_NAMESPACE}
+spec:
+  connectionRef:
+    name: infisical
+  identityRef:
+    name: e2e-identity
+  allowedNamespaces:
+    - ${TEST_NAMESPACE}
+  allowedNames:
+    - e2e-authenticated
+  verifyTLSCertificate: false
+  caCertSecretRef:
+    name: e2e-kubernetes-ca
+    key: ca.crt
+EOF
 
 token="$(${KUBECTL} -n "${INFISICAL_NAMESPACE}" get secret infisical-bootstrap-token -o jsonpath='{.data.token}' | base64 --decode)"
 if [[ -z "${token}" ]]; then
@@ -242,15 +325,13 @@ spec:
     name: infisical
   identityRef:
     name: e2e-identity
-  kubernetesHost: https://kubernetes.default.svc
+  kubernetesHost: ${KUBERNETES_AUTH_REVIEW_URL}
   allowedNamespaces:
     - ${TEST_NAMESPACE}
   allowedNames:
     - e2e-authenticated
-  caCertSecretRef:
-    name: e2e-kubernetes-ca
-    key: ca.crt
-  verifyTLSCertificate: true
+${kubernetes_ca_cert_ref}
+  verifyTLSCertificate: ${KUBERNETES_AUTH_VERIFY_TLS}
   tokenReviewerJWTSecretRef:
     name: e2e-kubernetes-token-reviewer
     key: token
@@ -260,7 +341,7 @@ spec:
 EOF
 
 kubernetes_auth_available=true
-if wait_for_ready_or_known_block infisicalkubernetesauth/e2e-kubernetes-auth "Local IPs not allowed as URL" "InfisicalKubernetesAuth"; then
+if wait_for_ready_or_known_block infisicalkubernetesauth/e2e-kubernetes-auth "${KUBERNETES_AUTH_EXPECTED_FAILURE}" "InfisicalKubernetesAuth"; then
   :
 else
   wait_result=$?
@@ -330,6 +411,8 @@ if [[ "${kubernetes_auth_available}" == true ]]; then
     echo "disallowed service account unexpectedly succeeded with Kubernetes Auth" >&2
     exit 1
   fi
+  echo "Kubernetes Auth allowed service account login: passed"
+  echo "Kubernetes Auth disallowed service account login: rejected as expected"
 fi
 
 echo "Live reconciliation succeeded with ${E2E_NETWORKING} and ${NETWORK_POLICY_FILE}"
