@@ -18,6 +18,8 @@ RUN_ID=${RUN_ID:-$(date +%s)}
 TENANT_ORGANIZATION_NAME=${TENANT_ORGANIZATION_NAME:-e2e-vcluster-org-${RUN_ID}}
 TENANT_PROJECT_NAME=${TENANT_PROJECT_NAME:-e2e-vcluster-project-${RUN_ID}}
 TENANT_IDENTITY_NAME=${TENANT_IDENTITY_NAME:-e2e-vcluster-tenant-${RUN_ID}}
+TENANT_UNIVERSAL_AUTH_NAME=${TENANT_UNIVERSAL_AUTH_NAME:-vcluster-universal-auth}
+TENANT_UNIVERSAL_AUTH_SECRET_NAME=${TENANT_UNIVERSAL_AUTH_SECRET_NAME:-vcluster-universal-auth-credentials}
 port_forward_pid=""
 
 host_kubectl() {
@@ -53,11 +55,12 @@ cleanup() {
   tenant_kubectl -n "${TEST_NAMESPACE}" delete infisicalorganization/other-boundary --ignore-not-found --wait=false >/dev/null 2>&1 || true
   tenant_kubectl -n "${TEST_NAMESPACE}" delete infisicalorganization/tenant-boundary --ignore-not-found --wait=false >/dev/null 2>&1 || true
   tenant_kubectl delete namespace "${TENANT_OPERATOR_NAMESPACE}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  host_kubectl -n "${TEST_NAMESPACE}" delete infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME} --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalidentity/vcluster-tenant-identity --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalproject/vcluster-anchor --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalorganization/vcluster-organization --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl -n "${TEST_NAMESPACE}" delete infisicalconnection/tenant-admin infisicalconnection/platform --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
-  host_kubectl -n "${TEST_NAMESPACE}" delete secret/infisical-tenant-admin-token secret/infisical-platform-token --ignore-not-found >/dev/null 2>&1 || true
+  host_kubectl -n "${TEST_NAMESPACE}" delete secret/infisical-tenant-admin-token secret/infisical-platform-token "${TENANT_UNIVERSAL_AUTH_SECRET_NAME}" --ignore-not-found >/dev/null 2>&1 || true
   host_kubectl delete namespace "${VCLUSTER_NAMESPACE}" --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   host_kubectl delete namespace "${TEST_NAMESPACE}" --ignore-not-found --wait=true --timeout=5m >/dev/null 2>&1 || true
   delete_remote_organization "${tenant_organization_id:-}" "${tenant_admin_token:-}"
@@ -236,36 +239,39 @@ EOF
 wait_host_ready infisicalproject/vcluster-anchor
 wait_host_ready infisicalidentity/vcluster-tenant-identity
 
-tenant_identity_id="$(host_kubectl -n "${TEST_NAMESPACE}" get infisicalidentity/vcluster-tenant-identity -o jsonpath='{.status.identityID}')"
 tenant_organization_role="$(host_kubectl -n "${TEST_NAMESPACE}" get infisicalidentity/vcluster-tenant-identity -o jsonpath='{.status.organizationRole}')"
-if [[ -z "${tenant_identity_id}" || "${tenant_organization_role}" != "admin" ]]; then
+if [[ "${tenant_organization_role}" != "admin" ]]; then
   echo "vCluster tenant identity did not become an organization admin" >&2
   host_kubectl -n "${TEST_NAMESPACE}" get infisicalidentity/vcluster-tenant-identity -o yaml >&2
   exit 1
 fi
 
-universal_auth_response="$(curl --silent --show-error --max-time 10 \
-  -H "Authorization: Bearer ${tenant_admin_token}" -H 'Content-Type: application/json' \
-  -X POST "http://127.0.0.1:18081/api/v1/auth/universal-auth/identities/${tenant_identity_id}" \
-  --data '{"clientSecretTrustedIps":[{"ipAddress":"0.0.0.0/0"},{"ipAddress":"::/0"}],"accessTokenTrustedIps":[{"ipAddress":"0.0.0.0/0"},{"ipAddress":"::/0"}],"accessTokenTTL":7200,"accessTokenMaxTTL":7200,"accessTokenNumUsesLimit":0,"accessTokenPeriod":0,"lockoutEnabled":true,"lockoutThreshold":3,"lockoutDurationSeconds":300,"lockoutCounterResetSeconds":30}')"
-if ! jq -e '.identityUniversalAuth' >/dev/null <<<"${universal_auth_response}"; then
-  echo "Infisical rejected the Universal Auth configuration request: ${universal_auth_response}" >&2
-  exit 1
-fi
-tenant_client_id="$(jq -er '.identityUniversalAuth.clientId' <<<"${universal_auth_response}")"
-client_secret_response="$(curl --silent --show-error --max-time 10 \
-  -H "Authorization: Bearer ${tenant_admin_token}" -H 'Content-Type: application/json' \
-  -X POST "http://127.0.0.1:18081/api/v1/auth/universal-auth/identities/${tenant_identity_id}/client-secrets" \
-  --data '{"description":"vcluster integration test","numUsesLimit":1,"ttl":3600}')"
-if ! client_secret="$(jq -er '.clientSecret' <<<"${client_secret_response}")"; then
-  echo "Infisical rejected the Universal Auth client-secret request: ${client_secret_response}" >&2
-  exit 1
-fi
-tenant_token_response="$(curl --silent --show-error --max-time 10 -H 'Content-Type: application/json' \
-  -X POST http://127.0.0.1:18081/api/v1/auth/universal-auth/login \
-  --data "$(jq -cn --arg clientId "${tenant_client_id}" --arg clientSecret "${client_secret}" '{clientId:$clientId,clientSecret:$clientSecret}')")"
-if ! tenant_token="$(jq -er '.accessToken' <<<"${tenant_token_response}")"; then
-  echo "Infisical Universal Auth login failed: ${tenant_token_response}" >&2
+cat <<EOF | host_kubectl -n "${TEST_NAMESPACE}" apply -f - >/dev/null
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalUniversalAuth
+metadata:
+  name: ${TENANT_UNIVERSAL_AUTH_NAME}
+spec:
+  connectionRef:
+    name: tenant-admin
+  identityRef:
+    name: vcluster-tenant-identity
+  clientSecret:
+    secretRef:
+      name: ${TENANT_UNIVERSAL_AUTH_SECRET_NAME}
+    description: vcluster integration test
+    numUsesLimit: 0
+    ttl: 3600
+    rotationNonce: "${RUN_ID}"
+  deletionPolicy: Delete
+EOF
+wait_host_ready infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME}
+tenant_client_id="$(host_kubectl -n "${TEST_NAMESPACE}" get secret "${TENANT_UNIVERSAL_AUTH_SECRET_NAME}" -o jsonpath='{.data.clientId}' | base64 --decode)"
+tenant_client_secret="$(host_kubectl -n "${TEST_NAMESPACE}" get secret "${TENANT_UNIVERSAL_AUTH_SECRET_NAME}" -o jsonpath='{.data.clientSecret}' | base64 --decode)"
+tenant_organization_slug="$(host_kubectl -n "${TEST_NAMESPACE}" get infisicalorganization/vcluster-organization -o jsonpath='{.status.slug}')"
+if [[ -z "${tenant_client_id}" || -z "${tenant_client_secret}" || -z "${tenant_organization_slug}" ]]; then
+  echo "Universal Auth resource did not publish complete tenant credentials" >&2
+  host_kubectl -n "${TEST_NAMESPACE}" get infisicaluniversalauth/${TENANT_UNIVERSAL_AUTH_NAME} -o yaml >&2 || true
   exit 1
 fi
 
@@ -282,8 +288,9 @@ other_admin_token="$(jq -er '.token' <<<"${other_admin_response}")"
   --context "kind-${KIND_CLUSTER}" --chart-version "${VCLUSTER_VERSION}" \
   --connect=false --background-proxy=false
 tenant_kubectl create namespace "${TENANT_OPERATOR_NAMESPACE}" --dry-run=client -o yaml | tenant_kubectl apply -f - >/dev/null
-tenant_kubectl -n "${TENANT_OPERATOR_NAMESPACE}" create secret generic infisical-token \
-  --from-literal=token="${tenant_token}" --dry-run=client -o yaml | tenant_kubectl apply -f - >/dev/null
+tenant_kubectl -n "${TENANT_OPERATOR_NAMESPACE}" create secret generic "${TENANT_UNIVERSAL_AUTH_SECRET_NAME}" \
+  --from-literal=clientId="${tenant_client_id}" --from-literal=clientSecret="${tenant_client_secret}" \
+  --dry-run=client -o yaml | tenant_kubectl apply -f - >/dev/null
 tenant_helm upgrade --install tenant-operator charts/infisical-entity-operator \
   --namespace "${TENANT_OPERATOR_NAMESPACE}" --create-namespace \
   --set image.repository="${image_repository}" --set image.tag="${image_tag}" \
@@ -297,10 +304,11 @@ cat <<EOF | tenant_kubectl -n "${TEST_NAMESPACE}" apply -f - >/dev/null
 apiVersion: v1
 kind: Secret
 metadata:
-  name: infisical-token
+  name: ${TENANT_UNIVERSAL_AUTH_SECRET_NAME}
 type: Opaque
 stringData:
-  token: ${tenant_token}
+  clientId: ${tenant_client_id}
+  clientSecret: ${tenant_client_secret}
 ---
 apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalConnection
@@ -308,9 +316,10 @@ metadata:
   name: infisical
 spec:
   hostAPI: ${host_api}
-  authSecretRef:
-    name: infisical-token
-    key: token
+  universalAuth:
+    secretRef:
+      name: ${TENANT_UNIVERSAL_AUTH_SECRET_NAME}
+    organizationSlug: ${tenant_organization_slug}
 ---
 apiVersion: infisical.infisical-operator.io/v1alpha1
 kind: InfisicalOrganization

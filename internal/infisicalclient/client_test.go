@@ -27,12 +27,18 @@ import (
 )
 
 const (
-	testOrganizationID           = "org-1"
-	testOrganizationMemberRole   = "member"
-	testOrganizationIdentityPath = "/api/v1/identities/identity-1"
-	testOrganizationByIDPath     = "/api/v1/organization/org-1"
-	testTenantName               = "tenant"
-	testProjectTemplatePath      = "/api/v1/project-templates/template-1"
+	testOrganizationID                 = "org-1"
+	testOrganizationMemberRole         = "member"
+	testOrganizationIdentityPath       = "/api/v1/identities/identity-1"
+	testOrganizationByIDPath           = "/api/v1/organization/org-1"
+	testTenantName                     = "tenant"
+	testProjectTemplateID              = "template-1"
+	testIdentityID                     = "identity-1"
+	testUniversalAuthClientSecretID    = "client-secret-1"
+	testUniversalAuthClientSecretValue = "secret-1"
+	testProjectTemplatePath            = "/api/v1/project-templates/template-1"
+	testIdentityTemplatePath           = "/api/v1/identity-templates/template-1"
+	testUniversalAuthIdentityPath      = "/api/v1/auth/universal-auth/identities/identity-1"
 )
 
 func TestClientUsesAPIPathAndBearerToken(t *testing.T) {
@@ -85,19 +91,174 @@ func TestProjectTemplateClientUsesTemplateEndpoints(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 	created, err := client.CreateProjectTemplate(context.Background(), CreateProjectTemplateRequest{Name: "platform-defaults", Type: "secret-manager"})
-	if err != nil || created.ID != "template-1" {
+	if err != nil || created.ID != testProjectTemplateID {
 		t.Fatalf("create project template: %#v, %v", created, err)
 	}
 	found, err := client.FindProjectTemplate(context.Background(), "platform-defaults")
-	if err != nil || found == nil || found.ID != "template-1" {
+	if err != nil || found == nil || found.ID != testProjectTemplateID {
 		t.Fatalf("find project template: %#v, %v", found, err)
 	}
-	updated, err := client.UpdateProjectTemplate(context.Background(), "template-1", ProjectTemplatePatch{Description: "updated", Roles: []ProjectTemplateRole{}})
+	updated, err := client.UpdateProjectTemplate(context.Background(), testProjectTemplateID, ProjectTemplatePatch{Description: "updated", Roles: []ProjectTemplateRole{}})
 	if err != nil || updated.Description != "updated" {
 		t.Fatalf("update project template: %#v, %v", updated, err)
 	}
-	if err := client.DeleteProjectTemplate(context.Background(), "template-1"); err != nil {
+	if err := client.DeleteProjectTemplate(context.Background(), testProjectTemplateID); err != nil {
 		t.Fatalf("delete project template: %v", err)
+	}
+}
+
+func TestIdentityTemplateClientUsesTemplateEndpoints(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		template := `{"id":"template-1","name":"cluster-auth","orgId":"org-1","authMethod":"kubernetes","templateFields":{"tokenReviewMode":"api","kubernetesHost":"https://kubernetes.default.svc","hasTokenReviewerJwt":true}}`
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/identity-templates":
+			_, _ = writer.Write([]byte(template))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/identity-templates/search" && request.URL.Query().Get("search") == "cluster-auth":
+			_, _ = writer.Write([]byte(`{"templates":[` + template + `],"totalCount":1}`))
+		case request.Method == http.MethodGet && request.URL.Path == testIdentityTemplatePath:
+			_, _ = writer.Write([]byte(template))
+		case request.Method == http.MethodPatch && request.URL.Path == testIdentityTemplatePath:
+			_, _ = writer.Write([]byte(template))
+		case request.Method == http.MethodDelete && request.URL.Path == testIdentityTemplatePath:
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	fields := IdentityTemplateFields{TokenReviewMode: "api", KubernetesHost: "https://kubernetes.default.svc"}
+	created, err := client.CreateIdentityTemplate(context.Background(), CreateIdentityTemplateRequest{Name: "cluster-auth", AuthMethod: "kubernetes", TemplateFields: fields})
+	if err != nil || created.ID != testProjectTemplateID {
+		t.Fatalf("create identity template: %#v, %v", created, err)
+	}
+	found, err := client.FindIdentityTemplate(context.Background(), "cluster-auth")
+	if err != nil || found == nil || found.ID != testProjectTemplateID {
+		t.Fatalf("find identity template: %#v, %v", found, err)
+	}
+	updated, err := client.UpdateIdentityTemplate(context.Background(), testProjectTemplateID, IdentityTemplatePatch{TemplateFields: fields})
+	if err != nil || updated.AuthMethod != "kubernetes" {
+		t.Fatalf("update identity template: %#v, %v", updated, err)
+	}
+	if _, err := client.GetIdentityTemplate(context.Background(), testProjectTemplateID); err != nil {
+		t.Fatalf("get identity template: %v", err)
+	}
+	if err := client.DeleteIdentityTemplate(context.Background(), testProjectTemplateID); err != nil {
+		t.Fatalf("delete identity template: %v", err)
+	}
+}
+
+func TestUniversalAuthClientExchangesAndCachesToken(t *testing.T) {
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"identityId":"identity-1"}`))
+	accessToken := "header." + claims + ".signature"
+	loginRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/auth/universal-auth/login":
+			loginRequests++
+			if request.Header.Get("Authorization") != "" {
+				t.Errorf("Universal Auth login unexpectedly used a bearer token")
+			}
+			var body struct {
+				ClientID         string `json:"clientId"`
+				ClientSecret     string `json:"clientSecret"`
+				OrganizationSlug string `json:"organizationSlug"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Errorf("decode Universal Auth login: %v", err)
+			}
+			if body.ClientID != "client-1" || body.ClientSecret != "secret-1" || body.OrganizationSlug != "tenant" {
+				t.Errorf("unexpected Universal Auth login: %#v", body)
+			}
+			_, _ = writer.Write([]byte(`{"accessToken":"` + accessToken + `","expiresIn":3600,"accessTokenMaxTTL":3600,"tokenType":"Bearer"}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/projects":
+			if request.Header.Get("Authorization") != "Bearer "+accessToken {
+				t.Errorf("unexpected cached bearer token: %s", request.Header.Get("Authorization"))
+			}
+			_, _ = writer.Write([]byte(`{"projects":[]}`))
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewWithUniversalAuth(server.URL+"/api", "client-1", "secret-1", "tenant", time.Second)
+	if err != nil {
+		t.Fatalf("new Universal Auth client: %v", err)
+	}
+	if err := client.Check(context.Background()); err != nil {
+		t.Fatalf("check Universal Auth client: %v", err)
+	}
+	if err := client.Check(context.Background()); err != nil {
+		t.Fatalf("check cached Universal Auth client: %v", err)
+	}
+	if loginRequests != 1 {
+		t.Fatalf("expected one token exchange, got %d", loginRequests)
+	}
+	if got, err := client.TokenIdentityIDContext(context.Background()); err != nil || got != testIdentityID {
+		t.Fatalf("unexpected Universal Auth identity ID: %q, %v", got, err)
+	}
+}
+
+func TestUniversalAuthClientUsesLifecycleEndpoints(t *testing.T) {
+	configResponse := `{"identityUniversalAuth":{"id":"ua-1","clientId":"client-1","identityId":"identity-1"}}`
+	responses := map[string]string{
+		http.MethodPost + " " + testUniversalAuthIdentityPath:                                            configResponse,
+		http.MethodGet + " " + testUniversalAuthIdentityPath:                                             configResponse,
+		http.MethodPatch + " " + testUniversalAuthIdentityPath:                                           configResponse,
+		http.MethodPost + " " + testUniversalAuthIdentityPath + "/client-secrets":                        `{"clientSecret":"secret-1","clientSecretData":{"id":"client-secret-1","identityUAId":"ua-1"}}`,
+		http.MethodGet + " " + testUniversalAuthIdentityPath + "/client-secrets":                         `{"clientSecretData":[{"id":"client-secret-1","identityUAId":"ua-1"}]}`,
+		http.MethodGet + " " + testUniversalAuthIdentityPath + "/client-secrets/client-secret-1":         `{"clientSecretData":{"id":"client-secret-1","identityUAId":"ua-1"}}`,
+		http.MethodDelete + " " + testUniversalAuthIdentityPath:                                          "",
+		http.MethodPost + " " + testUniversalAuthIdentityPath + "/client-secrets/client-secret-1/revoke": "",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		response, ok := responses[request.Method+" "+request.URL.Path]
+		if !ok {
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+			return
+		}
+		if response != "" {
+			_, _ = writer.Write([]byte(response))
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL+"/api", "secret-token", time.Second)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	configRequest := UniversalAuthConfigRequest{}
+	if config, err := client.AttachUniversalAuth(context.Background(), testIdentityID, configRequest); err != nil || config.ID != "ua-1" {
+		t.Fatalf("attach Universal Auth: %#v, %v", config, err)
+	}
+	if config, err := client.GetUniversalAuth(context.Background(), testIdentityID); err != nil || config.IdentityID != testIdentityID {
+		t.Fatalf("get Universal Auth: %#v, %v", config, err)
+	}
+	if _, err := client.UpdateUniversalAuth(context.Background(), testIdentityID, configRequest); err != nil {
+		t.Fatalf("update Universal Auth: %v", err)
+	}
+	created, err := client.CreateUniversalAuthClientSecret(context.Background(), testIdentityID, CreateUniversalAuthClientSecretRequest{})
+	if err != nil || created.ClientSecret != testUniversalAuthClientSecretValue {
+		t.Fatalf("create Universal Auth client secret: %#v, %v", created, err)
+	}
+	if secrets, err := client.ListUniversalAuthClientSecrets(context.Background(), testIdentityID); err != nil || len(secrets) != 1 {
+		t.Fatalf("list Universal Auth client secrets: %#v, %v", secrets, err)
+	}
+	if secret, err := client.GetUniversalAuthClientSecret(context.Background(), testIdentityID, testUniversalAuthClientSecretID); err != nil || secret.ID != testUniversalAuthClientSecretID {
+		t.Fatalf("get Universal Auth client secret: %#v, %v", secret, err)
+	}
+	if err := client.RevokeUniversalAuthClientSecret(context.Background(), testIdentityID, testUniversalAuthClientSecretID); err != nil {
+		t.Fatalf("revoke Universal Auth client secret: %v", err)
+	}
+	if err := client.DeleteUniversalAuth(context.Background(), testIdentityID); err != nil {
+		t.Fatalf("delete Universal Auth: %v", err)
 	}
 }
 

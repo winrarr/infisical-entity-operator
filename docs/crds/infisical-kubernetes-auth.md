@@ -2,7 +2,29 @@
 
 `InfisicalKubernetesAuth` attaches a Kubernetes Auth method to an `InfisicalIdentity`.
 
-Use `spec.templateID` when the Kubernetes Auth settings are managed by an Infisical Kubernetes Auth template. When it is set, omit the host, CA Secret, token reviewer Secret, review mode, gateway, and audience fields; those values come from Infisical’s template. The template ID is immutable in this resource, so delete and recreate the resource to change it.
+Use `spec.templateRef` when the Kubernetes Auth settings are managed by an `InfisicalIdentityTemplate`. The reference must resolve to a ready Kubernetes template in the same namespace. When it is set, omit the host, CA Secret, token reviewer Secret, review mode, gateway, and audience fields; those values come from the managed template. The template reference is immutable in this resource, so delete and recreate the resource to change it.
+
+```yaml
+apiVersion: infisical.infisical-operator.io/v1alpha1
+kind: InfisicalKubernetesAuth
+metadata:
+  name: payments-workload-kubernetes
+spec:
+  connectionRef:
+    name: infisical
+  identityRef:
+    name: payments-workload
+  templateRef:
+    name: payments-kubernetes-template
+  allowedNamespaces:
+    - payments
+  allowedNames:
+    - payments-workload
+  creationPolicy: CreateOrAdopt
+  deletionPolicy: Orphan
+```
+
+For direct per-resource configuration:
 
 ```yaml
 apiVersion: infisical.infisical-operator.io/v1alpha1

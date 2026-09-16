@@ -27,16 +27,30 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
-const maxErrorBodySize = 1 << 20
+const (
+	maxErrorBodySize         = 1 << 20
+	paginationLimitParameter = "limit"
+)
 
 // Client is a small, typed client for the Infisical API used by the operator.
 type Client struct {
-	baseURL    *url.URL
-	httpClient *http.Client
-	token      string
+	baseURL       *url.URL
+	httpClient    *http.Client
+	token         string
+	universalAuth *universalAuthCredentials
+	tokenMu       sync.Mutex
+}
+
+type universalAuthCredentials struct {
+	clientID         string
+	clientSecret     string
+	organizationSlug string
+	token            string
+	expiresAt        time.Time
 }
 
 // HTTPError represents a non-successful Infisical API response.
@@ -79,7 +93,22 @@ func (e *InvalidResponseError) Error() string { return e.Message }
 // The value is only used as an API resource identifier; Infisical still authorizes every
 // request using the original token.
 func (c *Client) TokenIdentityID() string {
-	parts := strings.Split(c.token, ".")
+	return tokenIdentityID(c.token)
+}
+
+// TokenIdentityIDContext returns the machine identity ID in the current access token.
+// Universal Auth clients obtain a token lazily, so this method performs the exchange when
+// necessary. It is intended for controllers that need the caller identity as an API ID.
+func (c *Client) TokenIdentityIDContext(ctx context.Context) (string, error) {
+	token, err := c.bearerToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	return tokenIdentityID(token), nil
+}
+
+func tokenIdentityID(token string) string {
+	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return ""
 	}
@@ -102,29 +131,39 @@ func New(baseURL, token string, timeout time.Duration) (*Client, error) {
 		return nil, errors.New("infisical bearer token is empty")
 	}
 
-	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(baseURL), "/"))
+	parsed, err := parseBaseURL(baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse Infisical API URL: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return nil, fmt.Errorf("infisical API URL must use http or https, got %q", parsed.Scheme)
-	}
-	if parsed.Host == "" {
-		return nil, errors.New("infisical API URL has no host")
-	}
-	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, errors.New("infisical API URL must not contain a query or fragment")
-	}
-	if timeout <= 0 {
-		timeout = 30 * time.Second
+		return nil, err
 	}
 
 	return &Client{
-		baseURL: parsed,
-		httpClient: &http.Client{
-			Timeout: timeout,
+		baseURL:    parsed,
+		httpClient: newHTTPClient(timeout),
+		token:      token,
+	}, nil
+}
+
+// NewWithUniversalAuth validates an Infisical API URL and returns a client that exchanges
+// the supplied Universal Auth credentials for cached short-lived bearer tokens on demand.
+func NewWithUniversalAuth(baseURL, clientID, clientSecret, organizationSlug string, timeout time.Duration) (*Client, error) {
+	if strings.TrimSpace(clientID) == "" {
+		return nil, errors.New("infisical Universal Auth client ID is empty")
+	}
+	if strings.TrimSpace(clientSecret) == "" {
+		return nil, errors.New("infisical Universal Auth client secret is empty")
+	}
+	parsed, err := parseBaseURL(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		baseURL:    parsed,
+		httpClient: newHTTPClient(timeout),
+		universalAuth: &universalAuthCredentials{
+			clientID:         clientID,
+			clientSecret:     clientSecret,
+			organizationSlug: organizationSlug,
 		},
-		token: token,
 	}, nil
 }
 
@@ -137,9 +176,68 @@ func (c *Client) Check(ctx context.Context) error {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, target any) error {
+	token, err := c.bearerToken(ctx)
+	if err != nil {
+		return err
+	}
+	return c.doWithToken(ctx, token, method, path, query, body, target)
+}
+
+func (c *Client) bearerToken(ctx context.Context) (string, error) {
+	if c.universalAuth == nil {
+		return c.token, nil
+	}
+
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+	if c.universalAuth.token != "" && time.Now().Before(c.universalAuth.expiresAt) {
+		return c.universalAuth.token, nil
+	}
+
+	var response struct {
+		AccessToken string  `json:"accessToken"`
+		ExpiresIn   float64 `json:"expiresIn"`
+		TokenType   string  `json:"tokenType"`
+	}
+	request := struct {
+		ClientID         string `json:"clientId"`
+		ClientSecret     string `json:"clientSecret"`
+		OrganizationSlug string `json:"organizationSlug,omitempty"`
+	}{
+		ClientID:         c.universalAuth.clientID,
+		ClientSecret:     c.universalAuth.clientSecret,
+		OrganizationSlug: c.universalAuth.organizationSlug,
+	}
+	if err := c.doWithToken(ctx, "", http.MethodPost, "/v1/auth/universal-auth/login", nil, request, &response); err != nil {
+		return "", fmt.Errorf("exchange Infisical Universal Auth credentials: %w", err)
+	}
+	if strings.TrimSpace(response.AccessToken) == "" {
+		return "", errors.New("infisical Universal Auth login returned an empty access token")
+	}
+	if response.TokenType != "" && !strings.EqualFold(response.TokenType, "Bearer") {
+		return "", fmt.Errorf("infisical Universal Auth login returned unsupported token type %q", response.TokenType)
+	}
+	c.universalAuth.token = response.AccessToken
+	// Refresh before the server-side expiry so a long request does not start with an
+	// already-expired token. Infisical returns seconds as a number in its OpenAPI schema.
+	validFor := time.Duration(response.ExpiresIn * float64(time.Second))
+	refreshSkew := 30 * time.Second
+	if validFor <= refreshSkew {
+		refreshSkew = validFor / 2
+	}
+	if refreshSkew < 0 {
+		refreshSkew = 0
+	}
+	c.universalAuth.expiresAt = time.Now().Add(validFor - refreshSkew)
+	return c.universalAuth.token, nil
+}
+
+func (c *Client) doWithToken(ctx context.Context, token, method, path string, query url.Values, body, target any) error {
 	requestURL := *c.baseURL
 	requestURL.Path = strings.TrimRight(c.baseURL.Path, "/") + "/" + strings.TrimLeft(path, "/")
-	requestURL.RawQuery = query.Encode()
+	if query != nil {
+		requestURL.RawQuery = query.Encode()
+	}
 
 	var requestBody io.Reader
 	if body != nil {
@@ -155,7 +253,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return fmt.Errorf("create Infisical API request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -180,4 +280,28 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return fmt.Errorf("decode Infisical API response: %w", err)
 	}
 	return nil
+}
+
+func parseBaseURL(baseURL string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(baseURL), "/"))
+	if err != nil {
+		return nil, fmt.Errorf("parse Infisical API URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("infisical API URL must use http or https, got %q", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return nil, errors.New("infisical API URL has no host")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, errors.New("infisical API URL must not contain a query or fragment")
+	}
+	return parsed, nil
+}
+
+func newHTTPClient(timeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	return &http.Client{Timeout: timeout}
 }

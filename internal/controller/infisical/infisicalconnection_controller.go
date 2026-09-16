@@ -83,7 +83,7 @@ func (r *InfisicalConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error
 			requests := make([]ctrl.Request, 0)
 			for i := range connections.Items {
 				connection := &connections.Items[i]
-				if connection.Spec.AuthSecretRef.Name == object.GetName() {
+				if connectionReferencesSecret(connection, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(connection)})
 				}
 			}

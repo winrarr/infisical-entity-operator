@@ -18,6 +18,14 @@ package v1alpha1
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+// ProjectRoleSubject identifies an Infisical project-role subject.
+// +kubebuilder:validation:Enum=secrets;secret-folders;secret-imports;dynamic-secrets;identity;pki-subscribers;certificate-templates;secret-rotation;secret-syncs;pki-syncs;secret-event-subscriptions;certificate-profiles;certificate-policies;certificate-application;certificate-authorities;certificates;secret-approval;secret-rollback;member;groups;role;integrations;webhooks;service-tokens;settings;secret-validation-rules;environments;tags;audit-logs;insights;ip-allowlist;pki-alerts;pki-collections;certificate-inventory-views;pki-discovery;pki-certificate-installations;code-signers;workspace;kms;cmek;kmip;commits;secret-scanning-data-sources;secret-scanning-findings;secret-scanning-configs;app-connections;hsm-connectors;honey-tokens;proxied-services;agent-vault-access-bundles;agent-vault-sessions;agent-vault-proxies;approval-requests;approval-request-grants;secret-approval-request;project-folder-grant
+type ProjectRoleSubject string
+
+// ProjectRoleAction identifies an Infisical project-role action.
+// +kubebuilder:validation:Enum=assign-additional-privileges;assign-role;assume-privileges;attach-hsm-connectors;connect-app-connections;create;create-app-connections;create-clients;create-data-sources;create-grant;create-hsm-connectors;create-root-credential;create-token;decrypt;delete;delete-app-connections;delete-clients;delete-data-sources;delete-hsm-connectors;delete-report;delete-root-credential;delete-token;describeSecret;edit;edit-app-connections;edit-auth;edit-data-sources;edit-hsm-connectors;edit-root-credential;encrypt;export-private-key;generate-client-certificates;generate-mac;generate-report;get-token;grant-privileges;import;import-certificates;import-secrets;issue-ca-certificate;issue-cert;issue-token;lease;list;list-certs;manage-application-attachments;manage-members;perform-rollback;proxy;read;read-app-connections;read-clients;read-configs;read-credentials;read-data-source-resources;read-data-source-scans;read-data-sources;read-findings;read-generated-credentials;read-grant;read-hsm-connectors;read-private-key;read-root-credential;readValue;remove-certificates;remove-secrets;report-usage;reset;reveal-acme-eab-secret;revoke;revoke-auth;revoke-grant;rotate;rotate-acme-eab-secret;rotate-credentials;rotate-secrets;run-scan;set-health-check-command;set-post-sync-command;set-target-host;sign;sign-intermediate;subscribe-to-creation-events;subscribe-to-deletion-events;subscribe-to-import-mutation-events;subscribe-to-update-events;sync-certificates;sync-secrets;test-hsm-connectors;trigger-data-source-scans;update-clients;update-configs;update-findings;verify;verify-mac
+type ProjectRoleAction string
+
 // ProjectRoleStringCondition describes a string condition using Infisical's comparison operators.
 type ProjectRoleStringCondition struct {
 	// Eq matches an exact value.
@@ -66,15 +74,15 @@ type ProjectRoleConditions struct {
 	EventType *ProjectRoleStringCondition `json:"eventType,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.conditions) || self.subject == 'secrets' || (!has(self.conditions.secretName) && !has(self.conditions.secretTags) && !has(self.conditions.eventType))",message="secretName, secretTags, and eventType conditions are only valid for the secrets subject"
 // ProjectRolePermission defines one subject/action permission rule.
 type ProjectRolePermission struct {
 	// Subject identifies the Infisical resource subject.
-	// +kubebuilder:validation:MinLength=1
-	Subject string `json:"subject"`
+	Subject ProjectRoleSubject `json:"subject"`
 	// Action lists one or more operations allowed on the subject.
 	// +kubebuilder:validation:MinItems=1
 	// +listType=atomic
-	Action []string `json:"action"`
+	Action []ProjectRoleAction `json:"action"`
 	// Inverted turns the rule into a deny rule when true.
 	// +optional
 	Inverted *bool `json:"inverted,omitempty"`

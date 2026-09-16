@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -50,6 +51,16 @@ const (
 	testSecondProjectID              = "project-2"
 	testProjectTemplateName          = "platform-defaults"
 	testProjectTemplateID            = "template-1"
+	testTenantSlug                   = "tenant"
+	testUniversalAuthIdentityPath    = "/api/v1/auth/universal-auth/identities/identity-1"
+	testUniversalAuthOutputSecret    = "tenant-credentials"
+	testUniversalAuthClientSecretID  = "secret-1"
+	testUniversalAuthClientSecret    = "one-time-secret"
+	testClusterAuthName              = "cluster-auth"
+	testKubernetesHost               = "https://kubernetes.default.svc"
+	testKubernetesCAKey              = "ca.crt"
+	testKubernetesCASecret           = "kubernetes-ca"
+	testKubernetesReviewerSecret     = "kubernetes-reviewer"
 	testIdentityPath                 = "/api/v1/projects/project-1/identities"
 	testIdentityByIDPath             = "/api/v1/projects/project-1/identities/identity-1"
 	testMembershipPath               = "/api/v1/projects/project-1/memberships/identities/identity-1"
@@ -91,6 +102,8 @@ func testClient(t *testing.T, objects ...client.Object) client.Client {
 			&infisicalv1alpha1.InfisicalEnvironment{},
 			&infisicalv1alpha1.InfisicalKubernetesAuth{},
 			&infisicalv1alpha1.InfisicalProjectRole{},
+			&infisicalv1alpha1.InfisicalIdentityTemplate{},
+			&infisicalv1alpha1.InfisicalUniversalAuth{},
 		).
 		Build()
 }
@@ -104,7 +117,7 @@ func connectionAndSecret(serverURL string) (*infisicalv1alpha1.InfisicalConnecti
 		ObjectMeta: metav1.ObjectMeta{Name: testConnection, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalConnectionSpec{
 			HostAPI: serverURL + "/api",
-			AuthSecretRef: infisicalv1alpha1.SecretKeyReference{
+			AuthSecretRef: &infisicalv1alpha1.SecretKeyReference{
 				Name: testTokenSecret,
 				Key:  testTokenKey,
 			},
@@ -140,6 +153,253 @@ func TestConnectionReconcilerReportsReachability(t *testing.T) {
 	}
 	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestConnectionReconcilerUsesUniversalAuthSecret(t *testing.T) {
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"identityId":"identity-1"}`))
+	accessToken := "header." + claims + ".signature"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/auth/universal-auth/login":
+			_, _ = writer.Write([]byte(`{"accessToken":"` + accessToken + `","expiresIn":3600,"accessTokenMaxTTL":3600,"tokenType":"Bearer"}`))
+		case request.Method == http.MethodGet && request.URL.Path == testProjectsPath:
+			if request.Header.Get("Authorization") != "Bearer "+accessToken {
+				t.Errorf("unexpected Universal Auth bearer token: %s", request.Header.Get("Authorization"))
+			}
+			_, _ = writer.Write([]byte(`{"projects":[]}`))
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection := &infisicalv1alpha1.InfisicalConnection{
+		ObjectMeta: metav1.ObjectMeta{Name: testConnection, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalConnectionSpec{
+			HostAPI: server.URL + "/api",
+			UniversalAuth: &infisicalv1alpha1.UniversalAuthConnectionSpec{
+				SecretRef:        infisicalv1alpha1.UniversalAuthSecretReference{Name: "universal-auth"},
+				OrganizationSlug: testTenantSlug,
+			},
+		},
+	}
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "universal-auth", Namespace: testNamespace}, Data: map[string][]byte{"clientId": []byte("client-1"), "clientSecret": []byte("client-secret-1")}}
+	kubeClient := testClient(t, connection, secret)
+	reconciler := &InfisicalConnectionReconciler{Client: kubeClient}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(connection)}); err != nil {
+		t.Fatalf("reconcile Universal Auth connection: %v", err)
+	}
+	var observed infisicalv1alpha1.InfisicalConnection
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(connection), &observed); err != nil {
+		t.Fatalf("get Universal Auth connection: %v", err)
+	}
+	if !conditionReady(observed.Status.Conditions) {
+		t.Fatalf("expected Universal Auth connection to be ready: %#v", observed.Status)
+	}
+}
+
+func TestUniversalAuthReconcilerPublishesClientSecret(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testUniversalAuthIdentityPath:
+			_, _ = writer.Write([]byte(`{"identityUniversalAuth":{"id":"ua-1","clientId":"client-1","identityId":"identity-1","accessTokenTTL":7200,"accessTokenMaxTTL":7200,"accessTokenNumUsesLimit":0,"accessTokenPeriod":0,"lockoutEnabled":true,"lockoutThreshold":3,"lockoutDurationSeconds":300,"lockoutCounterResetSeconds":30}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testUniversalAuthIdentityPath:
+			_, _ = writer.Write([]byte(`{"identityUniversalAuth":{"id":"ua-1","clientId":"client-1","identityId":"identity-1","accessTokenTTL":7200,"accessTokenMaxTTL":7200,"accessTokenNumUsesLimit":0,"accessTokenPeriod":0,"lockoutEnabled":true,"lockoutThreshold":3,"lockoutDurationSeconds":300,"lockoutCounterResetSeconds":30}}`))
+		case request.Method == http.MethodPost && request.URL.Path == testUniversalAuthIdentityPath+"/client-secrets":
+			_, _ = writer.Write([]byte(`{"clientSecret":"one-time-secret","clientSecretData":{"id":"secret-1","description":"operator","clientSecretPrefix":"uats_","clientSecretNumUsesLimit":0,"clientSecretTTL":0,"identityUAId":"ua-1","isClientSecretRevoked":false}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testUniversalAuthIdentityPath+"/client-secrets/"+testUniversalAuthClientSecretID:
+			_, _ = writer.Write([]byte(`{"clientSecretData":{"id":"secret-1","description":"operator","clientSecretPrefix":"uats_","clientSecretNumUsesLimit":0,"clientSecretTTL":0,"identityUAId":"ua-1","isClientSecretRevoked":false}}`))
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: "tenant-identity", Namespace: testNamespace},
+		Status: infisicalv1alpha1.InfisicalIdentityStatus{
+			IdentityID: "identity-1",
+			Conditions: []metav1.Condition{{Type: readyCondition, Status: metav1.ConditionTrue}},
+		},
+	}
+	auth := &infisicalv1alpha1.InfisicalUniversalAuth{
+		ObjectMeta: metav1.ObjectMeta{Name: "tenant-universal-auth", Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalUniversalAuthSpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			IdentityRef:   infisicalv1alpha1.LocalObjectReference{Name: identity.Name},
+			ClientSecret: infisicalv1alpha1.UniversalAuthClientSecretSpec{
+				SecretRef:   infisicalv1alpha1.UniversalAuthSecretReference{Name: testUniversalAuthOutputSecret},
+				Description: "operator",
+			},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, identity, auth)
+	reconciler := &InfisicalUniversalAuthReconciler{Client: kubeClient}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(auth)}); err != nil {
+		t.Fatalf("reconcile Universal Auth: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalUniversalAuth
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(auth), &observed); err != nil {
+		t.Fatalf("get Universal Auth: %v", err)
+	}
+	if observed.Status.AuthID != "ua-1" || observed.Status.ClientID != "client-1" || observed.Status.ClientSecret.ClientSecretID != testUniversalAuthClientSecretID || !conditionReady(observed.Status.Conditions) {
+		t.Fatalf("unexpected Universal Auth status: %#v", observed.Status)
+	}
+	var published corev1.Secret
+	if err := kubeClient.Get(context.Background(), client.ObjectKey{Namespace: testNamespace, Name: testUniversalAuthOutputSecret}, &published); err != nil {
+		t.Fatalf("get published client Secret: %v", err)
+	}
+	if string(published.Data["clientId"]) != "client-1" || string(published.Data["clientSecret"]) != "one-time-secret" {
+		t.Fatalf("unexpected published client Secret data")
+	}
+	if observed.Status.ClientSecret.ClientSecretID == "one-time-secret" {
+		t.Fatal("client secret value was exposed in status")
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(auth)}); err != nil {
+		t.Fatalf("reconcile stable Universal Auth: %v", err)
+	}
+}
+
+func TestUniversalAuthReconcilerRotatesClientSecretAfterNonceChange(t *testing.T) {
+	currentSecretID := testUniversalAuthClientSecretID
+	secretNumber := 0
+	revoked := ""
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == testUniversalAuthIdentityPath:
+			_, _ = writer.Write([]byte(`{"identityUniversalAuth":{"id":"ua-1","clientId":"client-1","identityId":"identity-1"}}`))
+		case request.Method == http.MethodGet && request.URL.Path == testUniversalAuthIdentityPath:
+			_, _ = writer.Write([]byte(`{"identityUniversalAuth":{"id":"ua-1","clientId":"client-1","identityId":"identity-1"}}`))
+		case request.Method == http.MethodPost && request.URL.Path == testUniversalAuthIdentityPath+"/client-secrets":
+			secretNumber++
+			currentSecretID = fmt.Sprintf("secret-%d", secretNumber)
+			_, _ = fmt.Fprintf(writer, `{"clientSecret":"value-%d","clientSecretData":{"id":"%s","identityUAId":"ua-1","clientSecretPrefix":"uats_","isClientSecretRevoked":false}}`, secretNumber, currentSecretID)
+		case request.Method == http.MethodGet && request.URL.Path == testUniversalAuthIdentityPath+"/client-secrets/"+currentSecretID:
+			_, _ = fmt.Fprintf(writer, `{"clientSecretData":{"id":"%s","identityUAId":"ua-1","clientSecretPrefix":"uats_","isClientSecretRevoked":false}}`, currentSecretID)
+		case request.Method == http.MethodPost && request.URL.Path == testUniversalAuthIdentityPath+"/client-secrets/"+testUniversalAuthClientSecretID+"/revoke":
+			revoked = testUniversalAuthClientSecretID
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	identity := &infisicalv1alpha1.InfisicalIdentity{
+		ObjectMeta: metav1.ObjectMeta{Name: "tenant-identity", Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalIdentityStatus{IdentityID: testIdentityID, Conditions: []metav1.Condition{{Type: readyCondition, Status: metav1.ConditionTrue}}},
+	}
+	auth := &infisicalv1alpha1.InfisicalUniversalAuth{
+		ObjectMeta: metav1.ObjectMeta{Name: "tenant-universal-auth", Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalUniversalAuthSpec{
+			ConnectionRef: infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			IdentityRef:   infisicalv1alpha1.LocalObjectReference{Name: identity.Name},
+			ClientSecret: infisicalv1alpha1.UniversalAuthClientSecretSpec{
+				SecretRef:     infisicalv1alpha1.UniversalAuthSecretReference{Name: testUniversalAuthOutputSecret},
+				RotationNonce: "one",
+			},
+		},
+	}
+	kubeClient := testClient(t, connection, secret, identity, auth)
+	reconciler := &InfisicalUniversalAuthReconciler{Client: kubeClient}
+	request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(auth)}
+	if _, err := reconciler.Reconcile(context.Background(), request); err != nil {
+		t.Fatalf("initial reconcile Universal Auth: %v", err)
+	}
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(auth), auth); err != nil {
+		t.Fatalf("get initial Universal Auth: %v", err)
+	}
+	auth.Spec.ClientSecret.RotationNonce = "two"
+	if err := kubeClient.Update(context.Background(), auth); err != nil {
+		t.Fatalf("update rotation nonce: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), request); err != nil {
+		t.Fatalf("rotating reconcile Universal Auth: %v", err)
+	}
+	var observed infisicalv1alpha1.InfisicalUniversalAuth
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(auth), &observed); err != nil {
+		t.Fatalf("get rotated Universal Auth: %v", err)
+	}
+	if observed.Status.ClientSecret.ClientSecretID != "secret-2" || observed.Status.ClientSecret.LastRotationNonce != "two" || revoked != testUniversalAuthClientSecretID {
+		t.Fatalf("rotation did not replace and revoke the expected credentials: status=%#v revoked=%q", observed.Status, revoked)
+	}
+	var published corev1.Secret
+	if err := kubeClient.Get(context.Background(), client.ObjectKey{Namespace: testNamespace, Name: testUniversalAuthOutputSecret}, &published); err != nil {
+		t.Fatalf("get rotated Secret: %v", err)
+	}
+	if string(published.Data["clientSecret"]) != "value-2" {
+		t.Fatalf("published Secret was not replaced")
+	}
+}
+
+func TestIdentityTemplateReconcilerUsesOrganizationAndSecretBackedFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		template := `{"id":"template-1","name":"cluster-auth","orgId":"org-1","authMethod":"kubernetes","templateFields":{"tokenReviewMode":"api","kubernetesHost":"https://kubernetes.default.svc","caCert":"ca-data","verifyTlsCertificate":true,"hasTokenReviewerJwt":true,"allowedAudience":"infisical"}}`
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/identity-templates":
+			_, _ = writer.Write([]byte(template))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/identity-templates/"+testProjectTemplateID:
+			_, _ = writer.Write([]byte(template))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/identity-templates/search":
+			_, _ = writer.Write([]byte(`{"templates":[],"totalCount":0}`))
+		case request.Method == http.MethodPatch && request.URL.Path == "/api/v1/identity-templates/"+testProjectTemplateID:
+			_, _ = writer.Write([]byte(template))
+		default:
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	connection, secret := connectionAndSecret(server.URL)
+	organization := &infisicalv1alpha1.InfisicalOrganization{
+		ObjectMeta: metav1.ObjectMeta{Name: testTenantSlug, Namespace: testNamespace},
+		Status:     infisicalv1alpha1.InfisicalOrganizationStatus{OrganizationID: testOrganizationID, Conditions: []metav1.Condition{{Type: readyCondition, Status: metav1.ConditionTrue}}},
+	}
+	template := &infisicalv1alpha1.InfisicalIdentityTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: testClusterAuthName, Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalIdentityTemplateSpec{
+			ConnectionRef:   infisicalv1alpha1.InfisicalConnectionReference{Name: connection.Name},
+			OrganizationRef: infisicalv1alpha1.LocalObjectReference{Name: organization.Name},
+			AuthMethod:      infisicalv1alpha1.IdentityTemplateAuthMethodKubernetes,
+			Kubernetes: &infisicalv1alpha1.IdentityTemplateKubernetesSpec{
+				KubernetesHost:            testKubernetesHost,
+				CACertSecretRef:           &infisicalv1alpha1.SecretKeyReference{Name: testKubernetesCASecret, Key: testKubernetesCAKey},
+				TokenReviewerJWTSecretRef: &infisicalv1alpha1.SecretKeyReference{Name: testKubernetesReviewerSecret, Key: testTokenKey},
+				VerifyTLSCertificate:      boolPtr(true),
+				TokenReviewMode:           infisicalv1alpha1.KubernetesTokenReviewModeAPI,
+				AllowedAudience:           "infisical",
+			},
+		},
+	}
+	caSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: testKubernetesCASecret, Namespace: testNamespace}, Data: map[string][]byte{testKubernetesCAKey: []byte("ca-data")}}
+	reviewerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: testKubernetesReviewerSecret, Namespace: testNamespace}, Data: map[string][]byte{testTokenKey: []byte("reviewer-token")}}
+	kubeClient := testClient(t, connection, secret, organization, template, caSecret, reviewerSecret)
+	reconciler := &InfisicalIdentityTemplateReconciler{Client: kubeClient}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(template)}); err != nil {
+		t.Fatalf("reconcile identity template: %v", err)
+	}
+
+	var observed infisicalv1alpha1.InfisicalIdentityTemplate
+	if err := kubeClient.Get(context.Background(), client.ObjectKeyFromObject(template), &observed); err != nil {
+		t.Fatalf("get identity template: %v", err)
+	}
+	if observed.Status.TemplateID != testProjectTemplateID || observed.Status.OrganizationID != testOrganizationID || observed.Status.Kubernetes == nil || !observed.Status.Kubernetes.HasCACertificate || !observed.Status.Kubernetes.HasTokenReviewerJWT || !conditionReady(observed.Status.Conditions) {
+		t.Fatalf("unexpected identity template status: %#v", observed.Status)
+	}
+	encoded, err := json.Marshal(observed.Status)
+	if err != nil {
+		t.Fatalf("marshal identity template status: %v", err)
+	}
+	if strings.Contains(string(encoded), "reviewer-token") || strings.Contains(string(encoded), "ca-data") {
+		t.Fatal("identity template status exposed a Secret value")
 	}
 }
 
@@ -995,7 +1255,7 @@ func TestProjectRoleReconcilerCreatesRoleWithConditions(t *testing.T) {
 			Slug:          "read-production",
 			Permissions: []infisicalv1alpha1.ProjectRolePermission{{
 				Subject: "secrets",
-				Action:  []string{"readValue"},
+				Action:  []infisicalv1alpha1.ProjectRoleAction{"readValue"},
 				Conditions: &infisicalv1alpha1.ProjectRoleConditions{
 					Environment: &infisicalv1alpha1.ProjectRoleStringCondition{Eq: "production"},
 				},
@@ -1021,6 +1281,36 @@ func TestProjectRoleReconcilerCreatesRoleWithConditions(t *testing.T) {
 	}
 	if len(observed.Status.Conditions) != 1 || observed.Status.Conditions[0].Status != metav1.ConditionTrue {
 		t.Fatalf("expected Ready=True, got %#v", observed.Status.Conditions)
+	}
+}
+
+func TestValidateProjectRoleSpecRejectsUnsupportedActionCombinations(t *testing.T) {
+	valid := &infisicalv1alpha1.InfisicalProjectRole{
+		Spec: infisicalv1alpha1.InfisicalProjectRoleSpec{
+			Permissions: []infisicalv1alpha1.ProjectRolePermission{{
+				Subject: "secrets",
+				Action:  []infisicalv1alpha1.ProjectRoleAction{"readValue"},
+			}},
+		},
+	}
+	if err := validateProjectRoleSpec(valid); err != nil {
+		t.Fatalf("expected valid project role permission: %v", err)
+	}
+
+	invalidAction := valid.DeepCopy()
+	invalidAction.Spec.Permissions[0].Action = []infisicalv1alpha1.ProjectRoleAction{"assign-role"}
+	if err := validateProjectRoleSpec(invalidAction); err == nil {
+		t.Fatal("expected action/subject validation error")
+	}
+
+	invalidCondition := valid.DeepCopy()
+	invalidCondition.Spec.Permissions[0].Subject = "audit-logs"
+	invalidCondition.Spec.Permissions[0].Action = []infisicalv1alpha1.ProjectRoleAction{"read"}
+	invalidCondition.Spec.Permissions[0].Conditions = &infisicalv1alpha1.ProjectRoleConditions{
+		SecretName: &infisicalv1alpha1.ProjectRoleStringCondition{Eq: "database-password"},
+	}
+	if err := validateProjectRoleSpec(invalidCondition); err == nil {
+		t.Fatal("expected condition/subject validation error")
 	}
 }
 
@@ -1095,12 +1385,12 @@ func TestKubernetesAuthReconcilerAttachesAuthWithSecretBackedCredentials(t *test
 func TestKubernetesAuthTemplateOmitsTemplateManagedFields(t *testing.T) {
 	auth := &infisicalv1alpha1.InfisicalKubernetesAuth{
 		Spec: infisicalv1alpha1.InfisicalKubernetesAuthSpec{
-			TemplateID:        "template-1",
+			TemplateRef:       &infisicalv1alpha1.LocalObjectReference{Name: testProjectTemplateID},
 			AllowedNamespaces: []string{"tenant"},
 			AllowedNames:      []string{"workload"},
 		},
 	}
-	request := kubernetesAuthRequestFrom(auth, "should-not-be-sent", "should-not-be-sent")
+	request := kubernetesAuthRequestFrom(auth, testProjectTemplateID, "should-not-be-sent", "should-not-be-sent")
 	encoded, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal Kubernetes Auth request: %v", err)
@@ -1108,9 +1398,49 @@ func TestKubernetesAuthTemplateOmitsTemplateManagedFields(t *testing.T) {
 	if string(encoded) != `{"templateId":"template-1","allowedNamespaces":"tenant","allowedNames":"workload"}` {
 		t.Fatalf("unexpected template-backed Kubernetes Auth request: %s", encoded)
 	}
-	auth.Spec.KubernetesHost = "https://kubernetes.default.svc"
+	auth.Spec.KubernetesHost = testKubernetesHost
 	if err := validateKubernetesAuthSpec(auth); err == nil {
 		t.Fatal("expected template-managed and per-resource Kubernetes settings to conflict")
+	}
+}
+
+func TestKubernetesAuthTemplateReferenceRequiresReadyKubernetesTemplate(t *testing.T) {
+	auth := &infisicalv1alpha1.InfisicalKubernetesAuth{
+		ObjectMeta: metav1.ObjectMeta{Name: "workload-auth", Namespace: testNamespace},
+		Spec: infisicalv1alpha1.InfisicalKubernetesAuthSpec{
+			TemplateRef: &infisicalv1alpha1.LocalObjectReference{Name: testClusterAuthName},
+		},
+	}
+	wrongMethod := &infisicalv1alpha1.InfisicalIdentityTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-auth", Namespace: testNamespace},
+		Spec:       infisicalv1alpha1.InfisicalIdentityTemplateSpec{AuthMethod: infisicalv1alpha1.IdentityTemplateAuthMethodOIDC},
+	}
+	kubeClient := testClient(t, auth, wrongMethod)
+	reconciler := &InfisicalKubernetesAuthReconciler{Client: kubeClient}
+	if _, err := reconciler.kubernetesAuthTemplateID(context.Background(), auth); err == nil {
+		t.Fatal("expected non-Kubernetes template reference to fail")
+	}
+	if err := kubeClient.Delete(context.Background(), wrongMethod); err != nil {
+		t.Fatalf("delete wrong template: %v", err)
+	}
+	readyTemplate := &infisicalv1alpha1.InfisicalIdentityTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-auth", Namespace: testNamespace},
+		Spec:       infisicalv1alpha1.InfisicalIdentityTemplateSpec{AuthMethod: infisicalv1alpha1.IdentityTemplateAuthMethodKubernetes},
+		Status: infisicalv1alpha1.InfisicalIdentityTemplateStatus{
+			TemplateID: testProjectTemplateID,
+			Conditions: []metav1.Condition{{Type: readyCondition, Status: metav1.ConditionTrue}},
+		},
+	}
+	if err := kubeClient.Create(context.Background(), readyTemplate); err != nil {
+		t.Fatalf("create ready template: %v", err)
+	}
+	readyTemplate.Status.TemplateID = testProjectTemplateID
+	readyTemplate.Status.Conditions = []metav1.Condition{{Type: readyCondition, Status: metav1.ConditionTrue}}
+	if err := kubeClient.Status().Update(context.Background(), readyTemplate); err != nil {
+		t.Fatalf("update ready template status: %v", err)
+	}
+	if got, err := reconciler.kubernetesAuthTemplateID(context.Background(), auth); err != nil || got != testProjectTemplateID {
+		t.Fatalf("expected ready Kubernetes template ID, got %q, %v", got, err)
 	}
 }
 
@@ -1120,7 +1450,7 @@ func TestPersistStatusPreservesConcurrentSpecUpdate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testConnection, Namespace: testNamespace},
 		Spec: infisicalv1alpha1.InfisicalConnectionSpec{
 			HostAPI: "https://initial.example/api",
-			AuthSecretRef: infisicalv1alpha1.SecretKeyReference{
+			AuthSecretRef: &infisicalv1alpha1.SecretKeyReference{
 				Name: testTokenSecret,
 			},
 		},

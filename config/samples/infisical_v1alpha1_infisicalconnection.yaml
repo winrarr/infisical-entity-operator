@@ -15,3 +15,7 @@ spec:
   authSecretRef:
     name: infisical-token
     key: token
+# For tenant-specific credentials, use this instead of authSecretRef:
+#   universalAuth:
+#     secretRef:
+#       name: tenant-universal-auth

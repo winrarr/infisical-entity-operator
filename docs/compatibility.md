@@ -4,7 +4,7 @@ This project supports a deliberately narrow Infisical control-plane API surface.
 
 ## Compatibility policy
 
-Infisical versions its public API per resource, rather than assigning one version to the whole API. The client therefore pins each endpoint path explicitly, currently using `v1` for projects, environments, roles, identities, memberships, project templates, and authentication methods, and `v2` for organization membership and workspace access. A resource may also use different route shapes within the same API version; for example, project-role reads use `/v1/projects/roles/{roleId}`, while project-role updates and deletes remain under `/v1/projects/{projectId}/roles/{roleId}`.
+Infisical versions its public API per resource, rather than assigning one version to the whole API. The client therefore pins each endpoint path explicitly, currently using `v1` for projects, environments, roles, identities, memberships, project templates, identity templates, and authentication methods, and `v2` for organization membership and workspace access. A resource may also use different route shapes within the same API version; for example, project-role reads use `/v1/projects/roles/{roleId}`, while project-role updates and deletes remain under `/v1/projects/{projectId}/roles/{roleId}`.
 
 The supported profiles are:
 

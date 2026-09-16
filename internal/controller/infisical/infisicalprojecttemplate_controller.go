@@ -332,7 +332,7 @@ func (r *InfisicalProjectTemplateReconciler) SetupWithManager(mgr ctrl.Manager) 
 			for i := range templates.Items {
 				template := &templates.Items[i]
 				var connection infisicalv1alpha1.InfisicalConnection
-				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: template.Namespace, Name: template.Spec.ConnectionRef.Name}, &connection); err == nil && connection.Spec.AuthSecretRef.Name == object.GetName() {
+				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: template.Namespace, Name: template.Spec.ConnectionRef.Name}, &connection); err == nil && connectionReferencesSecret(&connection, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(template)})
 				}
 			}

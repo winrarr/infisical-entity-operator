@@ -1,20 +1,20 @@
 # Infisical Entity Operator
 
-Kubernetes-native lifecycle management for Infisical organizations, project templates, projects, environments, project roles, project- and organization-scoped machine identities, and Kubernetes Auth.
+Kubernetes-native lifecycle management for Infisical organizations, project templates, projects, environments, project roles, project- and organization-scoped machine identities, identity authentication templates, Kubernetes Auth, and Universal Auth.
 
 The operator gives platform teams a declarative boundary around the Infisical control plane:
 
 ```text
 InfisicalConnection → InfisicalOrganization → InfisicalProject → InfisicalEnvironment
                                                     ├→ InfisicalProjectRole
-                                                    └→ InfisicalIdentity → InfisicalKubernetesAuth
+                                                    └→ InfisicalIdentity → InfisicalIdentityTemplate / InfisicalKubernetesAuth / InfisicalUniversalAuth
 ```
 
 It handles create-or-adopt workflows, drift correction, dependency-aware status conditions, finalizers, and explicit deletion policy. Secret synchronization remains outside this project; use Infisical’s official Kubernetes operator for `InfisicalSecret`-style workloads.
 
 ## Quick start
 
-Create a Secret containing an Infisical bearer token and apply a connection, project, and identity in the same namespace:
+Create a Secret containing an Infisical bearer token and apply a connection, project, and identity in the same namespace. For tenant-specific operator credentials, use `InfisicalUniversalAuth` to publish a client ID and client secret, then select it under `InfisicalConnection.spec.universalAuth`.
 
 ```yaml
 apiVersion: v1
@@ -58,7 +58,7 @@ spec:
   identityName: payments-workload
 ```
 
-An environment, project role, or Kubernetes Auth resource can reference the project or identity in the same namespace and will wait for that dependency to become ready.
+An environment, project role, identity authentication template, Universal Auth, or Kubernetes Auth resource can reference the project, organization, or identity in the same namespace and will wait for that dependency to become ready.
 
 Set `spec.roleSlugs` on an identity to manage its permanent Infisical project roles. Omit the field to leave an existing membership unmanaged; use the built-in `no-access` role explicitly when an identity should have no project permissions.
 
@@ -89,7 +89,7 @@ This creates an isolated Kind cluster with Kind's default CNI, installs the offi
 - `creationPolicy` defaults to `Create`; use `Adopt` or `CreateOrAdopt` to manage existing entities.
 - `deletionPolicy` defaults to `Orphan`. `Delete` is opt-in and invokes irreversible Infisical deletion.
 - Connection and ownership references are immutable after creation so an external object cannot silently move between endpoints or projects.
-- The operator stores external identifiers and observed state in Kubernetes status, never external bearer tokens.
+- The operator stores external identifiers and observed state in Kubernetes status, never external bearer tokens, client secrets, or other credential values.
 
 See the [documentation map](docs/index.md), [product scope](docs/product.md), [architecture](docs/architecture.md), [verification guide](docs/verification.md), [API compatibility policy](docs/compatibility.md), [backlog](docs/backlog.md), [tech-debt register](docs/tech-debt.md), [research](docs/research/2026-09-09-infisical-api-and-versions.md), and [decisions](docs/decisions/index.md).
 

@@ -33,6 +33,8 @@ if ! jq -e '(.formatVersion == 1) and (.operations | type == "array" and length 
 fi
 
 issues="$(jq -r --slurpfile contract "$contract_file" '
+  def schema_properties:
+    ((. // {}) | (.properties // {}) + ((.anyOf // []) | map(.properties // {}) | add // {}));
   . as $spec |
   $contract[0].operations[] as $expected |
   ($spec.paths[$expected.path][($expected.method | ascii_downcase)] // null) as $operation |
@@ -44,7 +46,7 @@ issues="$(jq -r --slurpfile contract "$contract_file" '
     (
       [
         $expected.requestProperties[]? as $property
-        | select(((($operation.requestBody.content["application/json"].schema.properties // {}) | has($property)) | not))
+        | select(((($operation.requestBody.content["application/json"].schema // {}) | schema_properties | has($property)) | not))
         | "missing request property \($property): \($expected.method) \($expected.path)"
       ] +
       [
@@ -54,7 +56,7 @@ issues="$(jq -r --slurpfile contract "$contract_file" '
       ] +
       [
         $expected.responseProperties[]? as $property
-        | select(((($operation.responses["200"].content["application/json"].schema.properties // {}) | has($property)) | not))
+        | select(((($operation.responses["200"].content["application/json"].schema // {}) | schema_properties | has($property)) | not))
         | "missing response property \($property): \($expected.method) \($expected.path)"
       ]
     )[]

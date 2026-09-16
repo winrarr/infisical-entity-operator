@@ -67,9 +67,44 @@ spec:
                 default: 30s
                 description: RequestTimeout bounds each request made to Infisical.
                 type: string
-            required:
-            - authSecretRef
+              universalAuth:
+                description: |-
+                  UniversalAuth selects a same-namespace Secret containing an Infisical Universal Auth
+                  client ID and client secret. The client secret is exchanged for short-lived bearer tokens.
+                properties:
+                  organizationSlug:
+                    description: |-
+                      OrganizationSlug optionally scopes Universal Auth login to an Infisical organization.
+                      When omitted, Infisical uses the organization where the machine identity was created.
+                    maxLength: 64
+                    type: string
+                  secretRef:
+                    description: SecretRef references a same-namespace Secret containing
+                      clientId and clientSecret.
+                    properties:
+                      clientIDKey:
+                        description: ClientIDKey is the Secret key containing the
+                          client ID. It defaults to clientId.
+                        type: string
+                      clientSecretKey:
+                        description: ClientSecretKey is the Secret key containing
+                          the client secret. It defaults to clientSecret.
+                        type: string
+                      name:
+                        description: Name is the Secret name.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - secretRef
+                type: object
             type: object
+            x-kubernetes-validations:
+            - message: exactly one of authSecretRef or universalAuth must be configured
+              rule: (has(self.authSecretRef) && !has(self.universalAuth)) || (!has(self.authSecretRef)
+                && has(self.universalAuth))
           status:
             description: status defines the observed state of InfisicalConnection
             properties:

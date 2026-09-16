@@ -64,6 +64,9 @@ func (r *InfisicalProjectRoleReconciler) Reconcile(ctx context.Context, req ctrl
 		return r.reconcileProjectRoleDeletion(ctx, &role)
 	}
 	before := role.DeepCopy()
+	if err := validateProjectRoleSpec(&role); err != nil {
+		return r.projectRoleError(ctx, &role, "InvalidSpec", err)
+	}
 
 	var project infisicalv1alpha1.InfisicalProject
 	if err := r.Get(ctx, client.ObjectKey{Namespace: role.Namespace, Name: role.Spec.ProjectRef.Name}, &project); err != nil {
@@ -216,7 +219,7 @@ func (r *InfisicalProjectRoleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			for i := range roles.Items {
 				role := &roles.Items[i]
 				var connection infisicalv1alpha1.InfisicalConnection
-				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: role.Namespace, Name: role.Spec.ConnectionRef.Name}, &connection); err == nil && connection.Spec.AuthSecretRef.Name == object.GetName() {
+				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: role.Namespace, Name: role.Spec.ConnectionRef.Name}, &connection); err == nil && connectionReferencesSecret(&connection, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(role)})
 				}
 			}

@@ -9,8 +9,12 @@ rules:
   resources:
   - secrets
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - infisical.infisical-operator.io
@@ -18,11 +22,13 @@ rules:
   - infisicalconnections
   - infisicalenvironments
   - infisicalidentities
+  - infisicalidentitytemplates
   - infisicalkubernetesauths
   - infisicalorganizations
   - infisicalprojectroles
   - infisicalprojects
   - infisicalprojecttemplates
+  - infisicaluniversalauths
   verbs:
   - create
   - delete
@@ -37,11 +43,13 @@ rules:
   - infisicalconnections/status
   - infisicalenvironments/status
   - infisicalidentities/status
+  - infisicalidentitytemplates/status
   - infisicalkubernetesauths/status
   - infisicalorganizations/status
   - infisicalprojectroles/status
   - infisicalprojects/status
   - infisicalprojecttemplates/status
+  - infisicaluniversalauths/status
   verbs:
   - get
   - patch
@@ -51,10 +59,12 @@ rules:
   resources:
   - infisicalenvironments/finalizers
   - infisicalidentities/finalizers
+  - infisicalidentitytemplates/finalizers
   - infisicalkubernetesauths/finalizers
   - infisicalorganizations/finalizers
   - infisicalprojectroles/finalizers
   - infisicalprojects/finalizers
   - infisicalprojecttemplates/finalizers
+  - infisicaluniversalauths/finalizers
   verbs:
   - update

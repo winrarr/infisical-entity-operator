@@ -1,0 +1,378 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: infisicaluniversalauths.infisical.infisical-operator.io
+spec:
+  group: infisical.infisical-operator.io
+  names:
+    kind: InfisicalUniversalAuth
+    listKind: InfisicalUniversalAuthList
+    plural: infisicaluniversalauths
+    singular: infisicaluniversalauth
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: InfisicalUniversalAuth is the Schema for the infisicaluniversalauths
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: InfisicalUniversalAuthSpec defines the desired state of an
+              Infisical Universal Auth method.
+            properties:
+              clientSecret:
+                description: ClientSecret declares the remote client secret and Kubernetes
+                  Secret publication.
+                properties:
+                  description:
+                    description: Description is the Infisical client secret description.
+                    maxLength: 255
+                    type: string
+                  numUsesLimit:
+                    description: NumUsesLimit limits client-secret exchanges. Zero
+                      means unlimited.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  rotationNonce:
+                    description: RotationNonce forces a new remote client secret when
+                      changed.
+                    type: string
+                  secretRef:
+                    description: SecretRef identifies the same-namespace Secret that
+                      will contain clientId and clientSecret.
+                    properties:
+                      clientIDKey:
+                        description: ClientIDKey is the Secret key containing the
+                          client ID. It defaults to clientId.
+                        type: string
+                      clientSecretKey:
+                        description: ClientSecretKey is the Secret key containing
+                          the client secret. It defaults to clientSecret.
+                        type: string
+                      name:
+                        description: Name is the Secret name.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  ttl:
+                    description: TTL is the client secret lifetime in seconds. Zero
+                      means no expiry.
+                    format: int64
+                    maximum: 315360000
+                    minimum: 0
+                    type: integer
+                required:
+                - secretRef
+                type: object
+              config:
+                description: Config contains optional Universal Auth settings.
+                properties:
+                  accessTokenMaxTTL:
+                    description: AccessTokenMaxTTL is the maximum access token lifetime
+                      in seconds.
+                    format: int64
+                    maximum: 315360000
+                    minimum: 0
+                    type: integer
+                  accessTokenNumUsesLimit:
+                    description: AccessTokenNumUsesLimit limits access token uses.
+                      Zero means unlimited.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  accessTokenPeriod:
+                    description: AccessTokenPeriod is the renewable access-token period
+                      in seconds. Zero disables periodic renewal.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  accessTokenTTL:
+                    description: AccessTokenTTL is the access token lifetime in seconds.
+                    format: int64
+                    maximum: 315360000
+                    minimum: 0
+                    type: integer
+                  accessTokenTrustedIPs:
+                    description: AccessTokenTrustedIPs limits where issued access
+                      tokens may be used.
+                    items:
+                      description: UniversalAuthTrustedIP identifies an IP address
+                        or CIDR range allowed by Universal Auth.
+                      properties:
+                        ipAddress:
+                          description: IPAddress is an IP address or CIDR range.
+                          minLength: 1
+                          type: string
+                      required:
+                      - ipAddress
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  clientSecretTrustedIPs:
+                    description: ClientSecretTrustedIPs limits where client secrets
+                      may be exchanged for access tokens.
+                    items:
+                      description: UniversalAuthTrustedIP identifies an IP address
+                        or CIDR range allowed by Universal Auth.
+                      properties:
+                        ipAddress:
+                          description: IPAddress is an IP address or CIDR range.
+                          minLength: 1
+                          type: string
+                      required:
+                      - ipAddress
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  lockoutCounterResetSeconds:
+                    description: LockoutCounterResetSeconds is how long until a failed-login
+                      counter resets.
+                    format: int64
+                    maximum: 3600
+                    minimum: 5
+                    type: integer
+                  lockoutDurationSeconds:
+                    description: LockoutDurationSeconds is how long a locked identity
+                      remains locked.
+                    format: int64
+                    maximum: 86400
+                    minimum: 30
+                    type: integer
+                  lockoutEnabled:
+                    description: LockoutEnabled enables lockout after failed Universal
+                      Auth logins.
+                    type: boolean
+                  lockoutThreshold:
+                    description: LockoutThreshold is the number of failed login attempts
+                      before lockout.
+                    format: int64
+                    maximum: 30
+                    minimum: 1
+                    type: integer
+                type: object
+              connectionRef:
+                description: ConnectionRef selects the Infisical API connection used
+                  to manage the auth method.
+                properties:
+                  name:
+                    description: Name is the InfisicalConnection name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              creationPolicy:
+                default: Create
+                description: CreationPolicy controls whether the operator attaches
+                  or adopts Universal Auth.
+                enum:
+                - Create
+                - Adopt
+                - CreateOrAdopt
+                type: string
+              deletionPolicy:
+                default: Orphan
+                description: DeletionPolicy controls whether the remote Universal
+                  Auth configuration is removed.
+                enum:
+                - Delete
+                - Orphan
+                type: string
+              identityRef:
+                description: IdentityRef references the same-namespace machine identity
+                  receiving Universal Auth.
+                properties:
+                  name:
+                    description: Name is the referenced resource name.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - clientSecret
+            - connectionRef
+            - identityRef
+            type: object
+          status:
+            description: InfisicalUniversalAuthStatus defines the observed state of
+              an Infisical Universal Auth method.
+            properties:
+              authID:
+                description: AuthID is the immutable Infisical Universal Auth configuration
+                  identifier.
+                type: string
+              clientID:
+                description: ClientID is safe to expose and is required for token
+                  exchange.
+                type: string
+              clientSecret:
+                description: UniversalAuthClientSecretStatus contains non-secret observed
+                  client-secret metadata.
+                properties:
+                  clientSecretID:
+                    type: string
+                  clientSecretPrefix:
+                    type: string
+                  lastRotatedAt:
+                    description: LastRotatedAt records when the currently published
+                      client secret was created.
+                    format: date-time
+                    type: string
+                  lastRotationNonce:
+                    type: string
+                  secretName:
+                    type: string
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              config:
+                description: UniversalAuthConfigStatus contains non-secret observed
+                  Universal Auth settings.
+                properties:
+                  accessTokenMaxTTL:
+                    format: int64
+                    type: integer
+                  accessTokenNumUsesLimit:
+                    format: int64
+                    type: integer
+                  accessTokenPeriod:
+                    format: int64
+                    type: integer
+                  accessTokenTTL:
+                    format: int64
+                    type: integer
+                  accessTokenTrustedIPs:
+                    items:
+                      description: UniversalAuthTrustedIP identifies an IP address
+                        or CIDR range allowed by Universal Auth.
+                      properties:
+                        ipAddress:
+                          description: IPAddress is an IP address or CIDR range.
+                          minLength: 1
+                          type: string
+                      required:
+                      - ipAddress
+                      type: object
+                    type: array
+                  clientSecretTrustedIPs:
+                    items:
+                      description: UniversalAuthTrustedIP identifies an IP address
+                        or CIDR range allowed by Universal Auth.
+                      properties:
+                        ipAddress:
+                          description: IPAddress is an IP address or CIDR range.
+                          minLength: 1
+                          type: string
+                      required:
+                      - ipAddress
+                      type: object
+                    type: array
+                  lockoutCounterResetSeconds:
+                    format: int64
+                    type: integer
+                  lockoutDurationSeconds:
+                    format: int64
+                    type: integer
+                  lockoutEnabled:
+                    type: boolean
+                  lockoutThreshold:
+                    format: int64
+                    type: integer
+                type: object
+              identityID:
+                description: IdentityID is the observed target machine identity identifier.
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

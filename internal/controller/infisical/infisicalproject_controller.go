@@ -183,7 +183,10 @@ func (r *InfisicalProjectReconciler) ensureProjectCreatorMembership(ctx context.
 	if project.Spec.OrganizationRef == nil || project.Status.ProjectID == "" {
 		return nil
 	}
-	identityID := apiClient.TokenIdentityID()
+	identityID, err := apiClient.TokenIdentityIDContext(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve creating identity from access token: %w", err)
+	}
 	if identityID == "" {
 		return nil
 	}
@@ -318,7 +321,7 @@ func (r *InfisicalProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			for i := range projects.Items {
 				project := &projects.Items[i]
 				var connection infisicalv1alpha1.InfisicalConnection
-				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: project.Namespace, Name: project.Spec.ConnectionRef.Name}, &connection); err == nil && connection.Spec.AuthSecretRef.Name == object.GetName() {
+				if err := mgr.GetClient().Get(ctx, client.ObjectKey{Namespace: project.Namespace, Name: project.Spec.ConnectionRef.Name}, &connection); err == nil && connectionReferencesSecret(&connection, object.GetName()) {
 					requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(project)})
 				}
 			}
